@@ -13,9 +13,8 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
     KeyboardButton,
 )
+import config
 
-TOKEN = "6424529465:AAE5tWhzlf6EfmgZhpq7qCBNasbCUnLSUW0"
-ADMIN_ID = 8043090854
 DB_FILE = "birthdays.json"
 
 dp = Dispatcher()
@@ -79,6 +78,7 @@ def register_keyboard():
         resize_keyboard=True,
         one_time_keyboard=False,
     )
+
 
 
 def start_inline_keyboard():
@@ -262,9 +262,10 @@ async def notify_admin_start(bot: Bot, user):
     username = f"@{user.username}" if user.username else "ندارد"
     profile = f"https://t.me/{user.username}" if user.username else f"tg://user?id={user.id}"
 
-    await bot.send_message(
-        ADMIN_ID,
-        "کاربر ربات را شروع کرد.\n\n"
+    for admin_id in config.ADMIN_IDS:
+        await bot.send_message(
+            admin_id,
+            "کاربر ربات را شروع کرد.\n\n"
         f"نام: {user.full_name}\n"
         f"آیدی عددی: <code>{user.id}</code>\n"
         f"یوزرنیم: {username}\n"
@@ -284,7 +285,7 @@ async def start_handler(message: Message, bot: Bot):
     if user_id in db:
         data = db[user_id]
 
-        if message.from_user.id == ADMIN_ID:
+        if message.from_user.id in config.ADMIN_IDS:
             await message.answer(
                 "سلام ادمین عزیز، خوش آمدید."
             )
@@ -295,7 +296,7 @@ async def start_handler(message: Message, bot: Bot):
         )
         return
 
-    if message.from_user.id == ADMIN_ID:
+    if message.from_user.id in config.ADMIN_IDS:
         await message.answer(
             "سلام ادمین عزیز، خوش آمدید.\n\n"
             "برای ثبت تاریخ تولد، دکمه زیر را بزنید.",
@@ -382,9 +383,10 @@ async def day_handler(callback: CallbackQuery, bot: Bot):
         reply_markup=main_keyboard(),
     )
 
-    await bot.send_message(
-        ADMIN_ID,
-        "تاریخ تولد کاربر ثبت شد.\n\n"
+    for admin_id in config.ADMIN_IDS:
+        await bot.send_message(
+            admin_id,
+            "تاریخ تولد کاربر ثبت شد.\n\n"
         f"نام: {callback.from_user.full_name}\n"
         f"آیدی عددی: <code>{callback.from_user.id}</code>\n"
         f"یوزرنیم: {username}\n"
@@ -461,7 +463,7 @@ async def since_handler(message: Message):
 
 
 async def main():
-    bot = Bot(token=TOKEN)
+    bot = Bot(token=config.BOT_TOKEN)
     await dp.start_polling(bot)
 
 

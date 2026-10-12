@@ -36,7 +36,9 @@ LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
 
 # --- آیدی عددی ادمین‌ها (با کاما جدا شده) ---
 ADMIN_IDS: set[int] = {
-    int(x) for x in os.getenv("ADMIN_IDS", "").replace(" ", "").split(",") if x
+    int(value)
+    for item in os.getenv("ADMIN_IDS", "").split(",")
+    if (value := item.strip())
 }
 
 # --- حداکثر تعداد پیام ارسالی در ثانیه (محدودیت تلگرام ~۳۰) ---

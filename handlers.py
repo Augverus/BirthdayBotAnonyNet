@@ -13,8 +13,6 @@ from utils import days_until_birthday, is_valid_date
 
 logger = logging.getLogger(__name__)
 
-START_NOTIFY_ADMIN_ID = 8043090854
-
 PERSIAN_MONTHS = {
     "فروردین": 1,
     "اردیبهشت": 2,
@@ -81,12 +79,13 @@ async def notify_admin_about_start(update: Update, context: ContextTypes.DEFAULT
     )
 
     try:
-        await context.bot.send_message(
-            chat_id=START_NOTIFY_ADMIN_ID,
-            text=text,
-            parse_mode="HTML",
-            disable_web_page_preview=True,
-        )
+        for admin_id in config.ADMIN_IDS:
+            await context.bot.send_message(
+                chat_id=admin_id,
+                text=text,
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
     except Exception as exc:
         logger.warning("Could not send start notification to admin: %s", exc)
 
