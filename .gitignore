@@ -3,6 +3,10 @@
 
 # دیتابیس
 *.db
+*.db-wal
+*.db-shm
+*.log
+backups/
 
 # پایتون
 __pycache__/

@@ -43,3 +43,8 @@ ADMIN_IDS: set[int] = {
 
 # --- حداکثر تعداد پیام ارسالی در ثانیه (محدودیت تلگرام ~۳۰) ---
 SEND_RATE: int = int(os.getenv("SEND_RATE", "25"))
+
+# --- Concurrent Telegram update handlers on this process ---
+UPDATE_CONCURRENCY: int = int(os.getenv("UPDATE_CONCURRENCY", "32"))
+if not 1 <= UPDATE_CONCURRENCY <= 256:
+    raise RuntimeError("UPDATE_CONCURRENCY must be between 1 and 256")

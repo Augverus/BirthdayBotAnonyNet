@@ -2,6 +2,8 @@ import asyncio
 import json
 import os
 from datetime import date
+from html import escape
+from time import monotonic
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart
@@ -49,6 +51,21 @@ BTN_SINCE_EMOJI_ID = "5231012545799666522"
 BTN_REGISTER_EMOJI_ID = "5206607081334906820"
 
 BUTTON_STYLE = "primary"
+ADMIN_NOTICE_COOLDOWN = 60
+_admin_notice_times = {}
+
+
+def allow_admin_notice(user_id):
+    now = monotonic()
+    expired = [uid for uid, sent_at in _admin_notice_times.items()
+               if now - sent_at >= ADMIN_NOTICE_COOLDOWN]
+    for uid in expired:
+        del _admin_notice_times[uid]
+    last_sent = _admin_notice_times.get(user_id)
+    if last_sent is not None and now - last_sent < ADMIN_NOTICE_COOLDOWN:
+        return False
+    _admin_notice_times[user_id] = now
+    return True
 
 
 def load_db():
@@ -285,6 +302,8 @@ def days_since_birthday(month, day):
 
 
 async def notify_admin_start(bot: Bot, user):
+    if not allow_admin_notice(user.id):
+        return
     db = load_db()
     data = db.get(str(user.id))
 
@@ -299,10 +318,10 @@ async def notify_admin_start(bot: Bot, user):
         await bot.send_message(
             admin_id,
             "کاربر ربات را شروع کرد.\n\n"
-        f"نام: {user.full_name}\n"
+        f"نام: {escape(user.full_name or 'Unknown')}\n"
         f"آیدی عددی: <code>{user.id}</code>\n"
-        f"یوزرنیم: {username}\n"
-        f"پروفایل: <a href='{profile}'>باز کردن پروفایل</a>\n"
+        f"یوزرنیم: {escape(username)}\n"
+        f"پروفایل: <a href='{escape(profile, quote=True)}'>باز کردن پروفایل</a>\n"
         f"تاریخ تولد: {birthday}",
         parse_mode="HTML",
     )
@@ -372,7 +391,14 @@ async def back_to_months_handler(callback: CallbackQuery):
 
 @dp.callback_query(F.data.startswith("month:"))
 async def month_handler(callback: CallbackQuery):
-    month = int(callback.data.split(":")[1])
+    try:
+        parts = callback.data.split(":")
+        month = int(parts[1])
+        if len(parts) != 2 or not 1 <= month <= len(MONTHS):
+            raise ValueError
+    except (ValueError, IndexError):
+        await callback.answer()
+        return
 
     await callback.message.edit_text(
         f"ماه انتخاب‌شده: {MONTHS[month - 1][0]}\n\n"
@@ -384,9 +410,14 @@ async def month_handler(callback: CallbackQuery):
 
 @dp.callback_query(F.data.startswith("day:"))
 async def day_handler(callback: CallbackQuery, bot: Bot):
-    _, month, day = callback.data.split(":")
-    month = int(month)
-    day = int(day)
+    try:
+        parts = callback.data.split(":")
+        month, day = int(parts[1]), int(parts[2])
+        if len(parts) != 3 or not 1 <= month <= len(MONTHS) or not 1 <= day <= MONTHS[month - 1][1]:
+            raise ValueError
+    except (ValueError, IndexError):
+        await callback.answer()
+        return
 
     db = load_db()
     user_id = str(callback.from_user.id)
@@ -416,20 +447,21 @@ async def day_handler(callback: CallbackQuery, bot: Bot):
         reply_markup=main_keyboard(callback.from_user.id),
     )
 
-    for admin_id in config.ADMIN_IDS:
-        await bot.send_message(
-            admin_id,
-            "تاریخ تولد کاربر ثبت شد.\n\n"
-        f"نام: {callback.from_user.full_name}\n"
-        f"آیدی عددی: <code>{callback.from_user.id}</code>\n"
-        f"یوزرنیم: {username}\n"
-        f"پروفایل: <a href='{profile}'>باز کردن پروفایل</a>\n"
-        f"تاریخ تولد: {birthday_text(month, day)}\n"
-        f"روزهای باقی‌مانده: {remaining}",
-        parse_mode="HTML",
-    )
+    await callback.answer()
+    if allow_admin_notice(callback.from_user.id):
+        for admin_id in config.ADMIN_IDS:
+            await bot.send_message(
+                admin_id,
+                "تاریخ تولد کاربر ثبت شد.\n\n"
+            f"نام: {escape(callback.from_user.full_name or 'Unknown')}\n"
+            f"آیدی عددی: <code>{callback.from_user.id}</code>\n"
+            f"یوزرنیم: {escape(username)}\n"
+            f"پروفایل: <a href='{escape(profile, quote=True)}'>باز کردن پروفایل</a>\n"
+            f"تاریخ تولد: {birthday_text(month, day)}\n"
+            f"روزهای باقی‌مانده: {remaining}",
+            parse_mode="HTML",
+        )
 
-    await callback.answer("ثبت شد")
 
 
 @dp.message(F.text == BTN_EDIT)
