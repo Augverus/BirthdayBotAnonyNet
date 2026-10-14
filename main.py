@@ -11,7 +11,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import SimpleEventIsolation
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, ErrorEvent
 
 import admin_panel
 import calendar_utils as cal
@@ -25,8 +25,21 @@ dp = Dispatcher(events_isolation=SimpleEventIsolation())
 user_router = Router(name='users')
 
 
-class SupportFlow(StatesGroup):
-    message = State()
+@dp.errors()
+async def capture_update_error(event: ErrorEvent):
+    error = event.exception
+    log.error('Unhandled Telegram update error',
+              exc_info=(type(error), error, error.__traceback__))
+    try:
+        store.record_error('telegram_update', f'{type(error).__name__}: {error}')
+    except Exception:
+        log.exception('Could not persist Telegram update error')
+
+
+class FriendBirthdayFlow(StatesGroup):
+    name = State()
+    month = State()
+    day = State()
 
 
 def months_keyboard():
@@ -191,12 +204,169 @@ async def id_handler(message: Message):
     await message.answer(f'🪪 آیدی عددی شما: <code>{message.from_user.id}</code>', parse_mode='HTML')
 
 
+@user_router.message(F.text == ui.BTN_FRIENDS)
+@user_router.message(Command('friends'))
+async def friends_entry(message: Message, state: FSMContext):
+    await state.clear()
+    text, keyboard = friends_listing(message.from_user.id)
+    await message.answer(text, parse_mode='HTML', reply_markup=keyboard)
+
+
+@user_router.message(F.text == ui.BTN_DATE_CONVERTER)
+async def date_converter_entry(message: Message):
+    if config.WEBAPP_URL:
+        text = '🗓 <b>مبدل تاریخ</b>\n\nتقویم شمسی و میلادی را به‌سادگی به هم تبدیل کن 🌱'
+    else:
+        text = ('🗓 <b>مبدل تاریخ شمسی و میلادی</b>\n\n'
+                'برای فعال شدن مینی‌اپ، نشانی HTTPS آن را در <code>WEBAPP_URL</code> فایل .env قرار بده.')
+    await message.answer(text, parse_mode='HTML', reply_markup=ui.date_converter_keyboard())
+
+
+@user_router.callback_query(F.data == 'date:setup')
+async def date_converter_setup(callback: CallbackQuery):
+    await callback.answer('ابتدا WEBAPP_URL را در فایل .env تنظیم کن.', show_alert=True)
+
+
+def friends_listing(uid):
+    rows = store.friend_birthdays(uid)
+    if not rows:
+        return ('🎂 <b>تولد عزیزان</b>\n\nهنوز تولدی ثبت نکرده‌ای.\n'
+                'با افزودن تاریخ تولد عزیزانت، روز تولدشان را فراموش نکن ✨',
+                ui.inline([[ui.button('➕ افزودن تولد', 'friend:add', 'success')]]))
+    digits = str.maketrans('0123456789', '۰۱۲۳۴۵۶۷۸۹')
+    lines = ['🎂 <b>تولد عزیزان</b>', '']
+    buttons = []
+    for row in rows:
+        days_left = cal.remaining(row['month'], row['day'])
+        days = str(days_left).translate(digits)
+        timing = '🎉 امروز تولدشه!' if days_left == 0 else f'⏳ {days} روز تا تولدش مانده'
+        reminder = '🔔 یادآوری روشن' if row['notification'] else '🔕 یادآوری خاموش'
+        lines.append(f"🎈 <b>{escape(row['name'])}</b> — {cal.birthday_text(row['month'], row['day'])}\n{timing} · {reminder}")
+        buttons.append([ui.button(f"🗑 حذف {row['name'][:24]}", f"friend:delete:{row['id']}", 'danger')])
+    buttons.append([ui.button('➕ افزودن تولد', 'friend:add', 'success')])
+    return '\n\n'.join(lines), ui.inline(buttons)
+
+
+@user_router.callback_query(F.data == 'friend:add')
+async def friend_add_start(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await state.set_state(FriendBirthdayFlow.name)
+    await callback.answer()
+    await callback.message.answer('✍️ اسم عزیزت را بفرست (حداکثر ۸۰ نویسه). برای لغو /cancel را بزن.')
+
+
+@user_router.message(FriendBirthdayFlow.name)
+async def friend_name(message: Message, state: FSMContext):
+    name = ' '.join((message.text or '').split())
+    if name == '/cancel':
+        await state.clear()
+        await message.answer('افزودن تولد لغو شد.', reply_markup=ui.home(message.from_user.id))
+        return
+    if not name or len(name) > 80:
+        await message.answer('لطفاً نامی کوتاه‌تر از ۸۰ نویسه بفرست.')
+        return
+    await state.update_data(friend_name=name)
+    await state.set_state(FriendBirthdayFlow.month)
+    buttons = [ui.button(month, f'friend:month:{i}', 'success' if i % 2 else 'primary')
+               for i, month in enumerate(cal.MONTHS, 1)]
+    await message.answer('🌸 ماه تولدش را انتخاب کن:', reply_markup=ui.inline(
+        [buttons[i:i+3] for i in range(0, 12, 3)]))
+
+
+@user_router.callback_query(FriendBirthdayFlow.month, F.data.startswith('friend:month:'))
+async def friend_month(callback: CallbackQuery, state: FSMContext):
+    try:
+        month = int(callback.data.rsplit(':', 1)[1])
+        if not 1 <= month <= 12:
+            raise ValueError()
+    except ValueError:
+        await callback.answer('ماه انتخاب‌شده معتبر نیست.', show_alert=True)
+        return
+    await state.update_data(friend_month=month)
+    await state.set_state(FriendBirthdayFlow.day)
+    max_day = 31 if month <= 6 else 30
+    buttons = [ui.button(str(day), f'friend:day:{month}:{day}', 'success')
+               for day in range(1, max_day + 1)]
+    await callback.answer()
+    await callback.message.edit_text(f'{cal.MONTHS[month-1]} — choose the day:',
+                                     reply_markup=ui.inline([buttons[i:i+5] for i in range(0, len(buttons), 5)]))
+
+
+@user_router.callback_query(FriendBirthdayFlow.day, F.data.startswith('friend:day:'))
+async def friend_day(callback: CallbackQuery, state: FSMContext):
+    try:
+        _, _, month, day = callback.data.split(':')
+        month, day = int(month), int(day)
+        data = await state.get_data()
+        if month != data.get('friend_month') or not cal.valid_birthday(month, day):
+            raise ValueError()
+    except (ValueError, TypeError):
+        await callback.answer('تاریخ انتخاب‌شده معتبر نیست.', show_alert=True)
+        return
+    await state.update_data(friend_day=day)
+    await state.set_state()
+    await callback.answer()
+    await callback.message.edit_text(
+        f"🎂 تولد <b>{escape(data['friend_name'])}</b>: {cal.birthday_text(month, day)}\n\n"
+        'دوست داری روز تولدش بهت یادآوری کنم؟', parse_mode='HTML', reply_markup=ui.inline([
+            [ui.button('🔔 بله، یادآوری کن', 'friend:notify:1', 'success'),
+             ui.button('🔕 بدون یادآوری', 'friend:notify:0')]]))
+
+
+@user_router.callback_query(F.data.startswith('friend:notify:'))
+async def friend_save(callback: CallbackQuery, state: FSMContext):
+    try:
+        enabled = int(callback.data.rsplit(':', 1)[1])
+        data = await state.get_data()
+        month, day, name = data['friend_month'], data['friend_day'], data['friend_name']
+        if enabled not in (0, 1) or not cal.valid_birthday(month, day):
+            raise ValueError()
+    except (KeyError, ValueError, TypeError):
+        await callback.answer('لطفاً دوباره از بخش تولد عزیزان شروع کن.', show_alert=True)
+        return
+    friend_id = store.add_friend_birthday(callback.from_user.id, name, month, day, enabled)
+    await state.clear()
+    if friend_id is None:
+        await callback.answer('حداکثر می‌توانی ۵۰ تولد ثبت کنی.', show_alert=True)
+        return
+    await callback.answer('ثبت شد!')
+    await callback.message.edit_text(
+        f"Saved <b>{escape(name)}</b> — {cal.birthday_text(month, day)}.\n"
+        + ('🔔 یادآوری روز تولد روشن است.' if enabled else '🔕 یادآوری روز تولد خاموش است.'), parse_mode='HTML')
+
+
+@user_router.callback_query(F.data == 'friend:list')
+async def friend_list(callback: CallbackQuery):
+    await callback.answer()
+    text, keyboard = friends_listing(callback.from_user.id)
+    await callback.message.edit_text(text, parse_mode='HTML', reply_markup=keyboard)
+
+
+@user_router.callback_query(F.data.startswith('friend:delete:'))
+async def friend_delete(callback: CallbackQuery):
+    try:
+        friend_id = int(callback.data.rsplit(':', 1)[1])
+    except ValueError:
+        await callback.answer('این مورد معتبر نیست.', show_alert=True)
+        return
+    deleted = store.delete_friend_birthday(callback.from_user.id, friend_id)
+    await callback.answer('حذف شد.' if deleted else 'تولد پیدا نشد.', show_alert=not deleted)
+    text, keyboard = friends_listing(callback.from_user.id)
+    await callback.message.edit_text(text, parse_mode='HTML', reply_markup=keyboard)
+
+
 @user_router.message(Command('help'))
 async def help_handler(message: Message):
-    await message.answer('🎂 تولدت را از دکمه‌ها ثبت یا ویرایش کن.\n'
-                         '/mybirthday — شمارش معکوس تولد\n/deletebirthday — حذف تولد\n'
-                         '/id — شناسه عددی\n/cancel — لغو عملیات جاری\n'
-                         '/admin — پنل مدیران\n\n💬 برای ارتباط با مدیر، دکمه پشتیبانی را بزن.')
+    await message.answer('''🎂 تولدت را ثبت کن و روزهای مانده تا آن را ببین.
+👥 در بخش تولد عزیزان، تولد خانواده و دوستانت را ذخیره کن.
+🗓 مبدل تاریخ، تقویم شمسی و میلادی را تبدیل می‌کند.
+
+/mybirthday — شمارش معکوس تولد خودت
+/deletebirthday — حذف تولد خودت
+/friends — دیدن تولدهای عزیزان
+/id — شناسه عددی
+/cancel — لغو عملیات
+/admin — پنل مدیران''')
 
 
 @user_router.message(Command('cancel'))
@@ -314,33 +484,6 @@ async def delete_callback(callback: CallbackQuery):
     await callback.message.answer('هر وقت خواستی، دوباره ثبتش کن 🎂', reply_markup=ui.home(callback.from_user.id))
 
 
-@user_router.message(F.text == ui.BTN_SUPPORT)
-async def support_entry(message: Message, state: FSMContext):
-    await state.set_state(SupportFlow.message)
-    await message.answer('💬 پیامت رو بفرست تا به مدیر ربات برسونم.\nبرای انصراف: /cancel')
-
-
-@user_router.message(SupportFlow.message)
-async def support_message(message: Message, state: FSMContext, bot):
-    uid = message.from_user.id
-    if not store.claim_rate_limit(uid, 'support', 60):
-        await state.clear()
-        await message.answer('برای جلوگیری از پیام‌های تکراری، هر ۶۰ ثانیه می‌توانی یک پیام پشتیبانی بفرستی.',
-                             reply_markup=ui.home(uid))
-        return
-    delivered = 0
-    for aid in store.admins():
-        try:
-            await bot.copy_message(aid, message.chat.id, message.message_id)
-            await bot.send_message(aid, f'📬 پیام پشتیبانی از {message.from_user.full_name}\nشناسه: {message.from_user.id}',
-                                   reply_markup=ui.inline([[ui.button('✉️ پاسخ به کاربر', f'adm:direct:{message.from_user.id}', 'success')]]))
-            delivered += 1
-        except TelegramAPIError:
-            log.warning('Support message delivery failed: %s', aid)
-    await state.clear()
-    await message.answer('✅ پیامت به مدیر رسید.' if delivered else '⏳ ارسال به مدیر فعلاً ممکن نیست؛ کمی بعد دوباره تلاش کن.', reply_markup=ui.home(uid))
-
-
 @user_router.message()
 async def fallback(message: Message):
     await message.answer('✨ از دکمه‌ها یک گزینه انتخاب کن؛ برای راهنما /help بفرست.', reply_markup=ui.home(message.from_user.id))
@@ -408,6 +551,12 @@ async def main():
     try:
         store.init()
         await _run_bot()
+    except Exception as exc:
+        try:
+            store.record_error('startup', f'{type(exc).__name__}: {exc}')
+        except Exception:
+            log.exception('Could not persist startup error')
+        raise
     finally:
         store.close_connection()
 

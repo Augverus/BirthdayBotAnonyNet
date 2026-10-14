@@ -1,6 +1,7 @@
 """Persistent message delivery queue, rate limiting and daily reminders."""
 import asyncio
 import logging
+from html import escape
 
 from aiogram.exceptions import TelegramForbiddenError, TelegramRetryAfter, TelegramBadRequest, TelegramAPIError
 
@@ -96,6 +97,31 @@ async def reminder_worker(bot):
             last_pruned_day = day_key
         hour, minute = map(int, store.setting('reminder_time', f'{config.REMINDER_HOUR:02}:{config.REMINDER_MINUTE:02}').split(':'))
         if store.setting('reminders_enabled', '0') == '1' and (t.hour, t.minute) >= (hour, minute):
+            # One consolidated annual birthday note per owner, even when several
+            # friends share the same date. Each owner has an independent marker.
+            friend_groups = {}
+            for friend in store.friend_birthdays_on(cal.today().month, cal.today().day):
+                if friend['blocked'] or friend['banned']:
+                    continue
+                friend_groups.setdefault(friend['owner_id'], []).append(friend['name'])
+            for owner_id, names in friend_groups.items():
+                if store.friend_reminder_sent(owner_id, day_key):
+                    continue
+                people = ', '.join(f'<b>{escape(name)}</b>' for name in names)
+                text = f'🎂 Today is {people}’s birthday!'
+                try:
+                    await send_slot(bot)
+                    await bot.send_message(owner_id, text, parse_mode='HTML')
+                except TelegramForbiddenError:
+                    store.update_user(owner_id, blocked=1)
+                    store.mark_friend_reminder(owner_id, day_key)
+                except TelegramRetryAfter as exc:
+                    await asyncio.sleep(exc.retry_after + 1)
+                    continue
+                except TelegramAPIError:
+                    continue
+                else:
+                    store.mark_friend_reminder(owner_id, day_key)
             for u in store.all_users():
                 if not u['month'] or not u['notification'] or u['blocked'] or u['banned']:
                     continue
@@ -127,6 +153,10 @@ async def supervised(worker, bot):
             await worker(bot)
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception as exc:
             log.exception('Background worker failed: %s', worker.__name__)
+            try:
+                store.record_error(worker.__name__, f'{type(exc).__name__}: {exc}')
+            except Exception:
+                log.exception('Could not persist background worker error')
             await asyncio.sleep(5)

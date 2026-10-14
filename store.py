@@ -89,11 +89,24 @@ def init():
             attempts INTEGER DEFAULT 0, error TEXT, PRIMARY KEY(job_id,user_id));
         CREATE TABLE IF NOT EXISTS bot_reminders(
             user_id INTEGER, day TEXT, PRIMARY KEY(user_id,day));
+        CREATE TABLE IF NOT EXISTS bot_friend_birthdays(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER NOT NULL,
+            name TEXT NOT NULL, month INTEGER NOT NULL, day INTEGER NOT NULL,
+            notification INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS bot_friend_birthdays_owner
+            ON bot_friend_birthdays(owner_id,month,day,id);
+        CREATE INDEX IF NOT EXISTS bot_friend_birthdays_date
+            ON bot_friend_birthdays(month,day,notification,owner_id);
+        CREATE TABLE IF NOT EXISTS bot_friend_reminders(
+            owner_id INTEGER NOT NULL, day TEXT NOT NULL, PRIMARY KEY(owner_id,day));
         CREATE TABLE IF NOT EXISTS bot_rate_limits(
             user_id INTEGER, action TEXT, last_used REAL NOT NULL,
             PRIMARY KEY(user_id,action));
         CREATE TABLE IF NOT EXISTS bot_audit(
             id INTEGER PRIMARY KEY, admin_id INTEGER, action TEXT, detail TEXT, created_at TEXT);
+        CREATE TABLE IF NOT EXISTS bot_errors(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, source TEXT NOT NULL,
+            detail TEXT NOT NULL, created_at TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS bot_users_last_seen ON bot_users(last_seen DESC,id);
         CREATE INDEX IF NOT EXISTS bot_deliveries_pending_job ON bot_deliveries(job_id,user_id)
             WHERE status='pending';
@@ -130,6 +143,31 @@ def audit(admin_id, action, detail=''):
     with connection() as c:
         c.execute('INSERT INTO bot_audit(admin_id,action,detail,created_at) VALUES(?,?,?,?)',
                   (admin_id, action, str(detail), now()))
+
+
+def record_error(source, detail):
+    """Keep a bounded, token-redacted summary for the admin error page."""
+    source = str(source)[:100]
+    detail = str(detail)
+    if config.BOT_TOKEN:
+        detail = detail.replace(config.BOT_TOKEN, '[redacted]')
+    with connection() as c:
+        c.execute('INSERT INTO bot_errors(source,detail,created_at) VALUES(?,?,?)',
+                  (source, detail[:500], now()))
+        c.execute('DELETE FROM bot_errors WHERE id NOT IN '
+                  '(SELECT id FROM bot_errors ORDER BY id DESC LIMIT 100)')
+
+
+def recent_errors(limit=8):
+    with connection() as c:
+        return [dict(row) for row in c.execute(
+            'SELECT id,source,detail,created_at FROM bot_errors ORDER BY id DESC LIMIT ?',
+            (max(1, min(20, int(limit))),))]
+
+
+def clear_errors():
+    with connection() as c:
+        return c.execute('DELETE FROM bot_errors').rowcount
 
 
 def admins():
@@ -174,6 +212,53 @@ def prune_reminders(before_day):
     """Keep only reminder markers for the current local day."""
     with connection() as c:
         c.execute('DELETE FROM bot_reminders WHERE day < ?', (before_day,))
+        c.execute('DELETE FROM bot_friend_reminders WHERE day < ?', (before_day,))
+
+
+def add_friend_birthday(owner_id, name, month, day, notification=True):
+    name = ' '.join(str(name).split())
+    if not name or len(name) > 80 or not 1 <= month <= 12 or not 1 <= day <= 31:
+        raise ValueError('Invalid friend birthday')
+    with connection() as c:
+        count = c.execute('SELECT COUNT(*) FROM bot_friend_birthdays WHERE owner_id=?',
+                           (owner_id,)).fetchone()[0]
+        if count >= 50:
+            return None
+        return c.execute('''INSERT INTO bot_friend_birthdays
+            (owner_id,name,month,day,notification,created_at) VALUES(?,?,?,?,?,?)''',
+            (owner_id, name, month, day, int(bool(notification)), now())).lastrowid
+
+
+def friend_birthdays(owner_id):
+    with connection() as c:
+        return [dict(r) for r in c.execute('''SELECT id,name,month,day,notification
+            FROM bot_friend_birthdays WHERE owner_id=? ORDER BY month,day,name COLLATE NOCASE,id''',
+            (owner_id,))]
+
+
+def delete_friend_birthday(owner_id, friend_id):
+    with connection() as c:
+        return c.execute('DELETE FROM bot_friend_birthdays WHERE owner_id=? AND id=?',
+                         (owner_id, friend_id)).rowcount == 1
+
+
+def friend_birthdays_on(month, day):
+    with connection() as c:
+        return [dict(r) for r in c.execute('''SELECT f.owner_id,f.name,u.blocked,u.banned
+            FROM bot_friend_birthdays f LEFT JOIN bot_users u ON u.id=f.owner_id
+            WHERE f.month=? AND f.day=? AND f.notification=1
+            ORDER BY f.owner_id,f.name COLLATE NOCASE''', (month, day))]
+
+
+def friend_reminder_sent(owner_id, day):
+    with connection() as c:
+        return c.execute('SELECT 1 FROM bot_friend_reminders WHERE owner_id=? AND day=?',
+                         (owner_id, day)).fetchone() is not None
+
+
+def mark_friend_reminder(owner_id, day):
+    with connection() as c:
+        c.execute('INSERT OR IGNORE INTO bot_friend_reminders VALUES(?,?)', (owner_id, day))
 
 
 def update_user(uid, **values):

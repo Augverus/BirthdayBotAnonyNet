@@ -18,13 +18,21 @@ import ui
 router = Router(name='administration')
 
 
+def admin_button(text, data, color='primary'):
+    return ui.button(text, data, color)
+
+
+def admin_keyboard(rows):
+    return ui.inline(rows)
+
+
 class AdminFlow(StatesGroup):
     input = State()
     content = State()
 
 
 def back():
-    return [ui.button('↩️ پنل مدیریت', 'adm:home')]
+    return [admin_button('↩️ پنل مدیریت', 'adm:home')]
 
 
 def cancel_keyboard():
@@ -32,13 +40,14 @@ def cancel_keyboard():
 
 
 def dashboard():
-    return ui.inline([
+    return admin_keyboard([
         [ui.button('📊 آمار دقیق', 'adm:stats', 'success'), ui.button('👥 کاربران', 'adm:users:0')],
         [ui.button('🔒 قفل کانال', 'adm:channel'), ui.button('📣 پیام همگانی', 'adm:broadcast', 'success')],
         [ui.button('✉️ پیام به کاربر', 'adm:prompt:direct'), ui.button('📨 گزارش ارسال‌ها', 'adm:jobs')],
         [ui.button('👁 گروه‌ها و پیام‌ها', 'adm:groups:0'), ui.button('⚙️ تنظیمات', 'adm:settings')],
         [ui.button('🛡 مدیران', 'adm:admins'), ui.button('📁 خروجی کاربران', 'adm:export')],
         [ui.button('📋 گزارش مدیریت', 'adm:audit')],
+        [admin_button('Recent errors', 'adm:errors', 'primary')],
     ])
 
 
@@ -96,6 +105,24 @@ def user_text(u):
             f'مسدود در ربات: {"بله" if u["banned"] else "خیر"}\n'
             f'اولین ورود (UTC): {escape(u["first_seen"] or "نامعلوم؛ انتقال از نسخه قبل")}\n'
             f'آخرین فعالیت (UTC): {escape(u["last_seen"] or "نامعلوم")}')
+
+
+def error_page():
+    records = store.recent_errors(8)
+    lines = ['<b>Recent errors</b>']
+    if not records:
+        lines.append('\nNo recorded errors.')
+    else:
+        for error in records:
+            lines.append(
+                f'\n<code>{escape(error["created_at"][:19])}</code> | '
+                f'<b>{escape(error["source"])}</b>\n{escape(error["detail"][:220])}')
+    keyboard = admin_keyboard([
+        [admin_button('Refresh', 'adm:errors', 'primary')],
+        [admin_button('Clear', 'adm:errors_clear', 'danger')],
+        back(),
+    ])
+    return '\n'.join(lines), keyboard
 
 
 PROMPTS = {
@@ -342,6 +369,21 @@ async def admin_callback(callback: CallbackQuery, state: FSMContext, bot):
             writer.writerow([csv_cell(u[k]) for k in fields])
         await callback.message.answer_document(BufferedInputFile(output.getvalue().encode('utf-8-sig'), filename='bot-users.csv'), caption='📁 خروجی کاربران')
         store.audit(aid, 'export_users')
+    elif action == 'errors':
+        text, keyboard = error_page()
+        await render(callback, text, keyboard)
+    elif action == 'errors_clear':
+        await render(callback, 'Clear the recent error history?', admin_keyboard([
+            [admin_button('Confirm clear', 'adm:errors_clear_confirm', 'danger')],
+            [admin_button('Cancel', 'adm:errors', 'primary')],
+        ]))
+    elif action == 'errors_clear_confirm':
+        removed = store.clear_errors()
+        store.audit(aid, 'clear_errors', removed)
+        await render(callback, f'Cleared {removed} error records.', admin_keyboard([
+            [admin_button('Recent errors', 'adm:errors', 'primary')],
+            back(),
+        ]))
     elif action == 'audit':
         with store.connection() as c:
             records = c.execute('SELECT * FROM bot_audit ORDER BY id DESC LIMIT 12').fetchall()

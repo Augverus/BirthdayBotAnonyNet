@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>مبدل تاریخ | تولد عزیزان</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root { color-scheme: light dark; --bg: var(--tg-theme-bg-color, #f4f7fb); --fg: var(--tg-theme-text-color, #172033); --muted: var(--tg-theme-hint-color, #778194); --card: var(--tg-theme-secondary-bg-color, #fff); --accent: var(--tg-theme-button-color, #2878e8); --accentText: var(--tg-theme-button-text-color, #fff); }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: max(26px, env(safe-area-inset-top)) 18px max(28px, env(safe-area-inset-bottom)); background: var(--bg); color: var(--fg); font: 16px/1.8 system-ui, sans-serif; }
+    main { max-width: 540px; margin: 0 auto; }
+    .hero { text-align: center; padding: 10px 8px 20px; }
+    .badge { display: inline-grid; place-items: center; width: 58px; height: 58px; border-radius: 20px; background: color-mix(in srgb, var(--accent) 14%, var(--card)); font-size: 29px; margin-bottom: 8px; }
+    h1 { font-size: 1.45rem; margin: 0; }
+    .hint { color: var(--muted); margin: 3px 0 0; }
+    .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 5px; border-radius: 15px; background: var(--card); margin-bottom: 16px; }
+    button, input { font: inherit; }
+    .tab { border: 0; border-radius: 11px; padding: 11px 7px; color: var(--fg); background: transparent; font-size: .92rem; }
+    .tab.active { background: var(--accent); color: var(--accentText); }
+    .card { padding: 20px; border-radius: 18px; background: var(--card); box-shadow: 0 6px 24px #0000000c; }
+    label { display: block; font-weight: 700; margin-bottom: 8px; }
+    input { width: 100%; padding: 13px; border: 1px solid #8b95a533; border-radius: 12px; color: var(--fg); background: var(--bg); direction: ltr; text-align: left; }
+    .convert { width: 100%; border: 0; border-radius: 12px; padding: 13px; margin-top: 14px; background: var(--accent); color: var(--accentText); font-weight: 750; }
+    .result { margin-top: 18px; min-height: 30px; font-weight: 700; overflow-wrap: anywhere; }
+    .error { color: #df4b4b; }
+    .foot { color: var(--muted); font-size: .88rem; text-align: center; margin: 17px 4px 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="hero"><div class="badge">🗓️</div><h1>مبدل تاریخ شمسی و میلادی</h1><p class="hint">تاریخ دلخواهت را سریع و دقیق تبدیل کن ✨</p></header>
+    <div class="tabs" role="tablist" aria-label="جهت تبدیل">
+      <button class="tab active" id="to-jalali" role="tab" aria-selected="true">میلادی ← شمسی</button>
+      <button class="tab" id="to-gregorian" role="tab" aria-selected="false">شمسی ← میلادی</button>
+    </div>
+    <section class="card">
+      <label id="date-label" for="date-input">📅 تاریخ میلادی</label>
+      <input id="date-input" type="date" inputmode="numeric" aria-label="تاریخ">
+      <button id="convert" class="convert">🔄 تبدیل تاریخ</button>
+      <div id="result" class="result" aria-live="polite"></div>
+    </section>
+    <p class="foot">🔒 تاریخ فقط روی دستگاه خودت پردازش می‌شود و برای ربات ارسال نمی‌شود.</p>
+  </main>
+  <script>
+    (() => {
+      const app = window.Telegram && window.Telegram.WebApp;
+      if (app) { app.ready(); app.expand(); }
+      const formatter = new Intl.DateTimeFormat('en-u-ca-persian-nu-latn', {
+        calendar: 'persian', numberingSystem: 'latn', timeZone: 'UTC',
+        year: 'numeric', month: 'numeric', day: 'numeric'
+      });
+      const persianDigits = new Intl.NumberFormat('fa-IR');
+      const input = document.getElementById('date-input');
+      const label = document.getElementById('date-label');
+      const result = document.getElementById('result');
+      const jalaliTab = document.getElementById('to-jalali');
+      const gregorianTab = document.getElementById('to-gregorian');
+      let mode = 'jalali';
+
+      function jalaliParts(date) {
+        const parts = Object.fromEntries(formatter.formatToParts(date).map(part => [part.type, part.value]));
+        return [Number(parts.year), Number(parts.month), Number(parts.day)];
+      }
+      function compare(a, b) {
+        for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1;
+        return 0;
+      }
+      function jalaliToGregorian(value) {
+        const normalized = value.trim().replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+          .replace(/[٠-٩]/g, digit => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)));
+        const match = /^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/.exec(normalized);
+        if (!match) throw new Error('تاریخ شمسی را به شکل ۱۴۰۵/۰۱/۰۱ وارد کن.');
+        const wanted = match.slice(1).map(Number);
+        const [year, month, day] = wanted;
+        if (year < 1200 || month < 1 || month > 12 || day < 1 || day > 31) throw new Error('این تاریخ در بازهٔ معتبر نیست.');
+        let low = Date.UTC(year + 621, 0, 1) / 86400000;
+        let high = Date.UTC(year + 623, 0, 1) / 86400000;
+        while (low <= high) {
+          const middle = Math.floor((low + high) / 2);
+          const date = new Date(middle * 86400000);
+          const order = compare(jalaliParts(date), wanted);
+          if (order === 0) return date.toISOString().slice(0, 10);
+          if (order < 0) low = middle + 1; else high = middle - 1;
+        }
+        throw new Error('این روز در تقویم شمسی وجود ندارد.');
+      }
+      function convert() {
+        result.className = 'result';
+        try {
+          if (mode === 'jalali') {
+            if (!input.value) throw new Error('اول یک تاریخ میلادی انتخاب کن.');
+            const date = new Date(input.value + 'T00:00:00Z');
+            if (Number.isNaN(date.valueOf())) throw new Error('تاریخ واردشده معتبر نیست.');
+            const [year, month, day] = jalaliParts(date);
+            result.textContent = '🎉 تاریخ شمسی: ' + [year, String(month).padStart(2, '0'), String(day).padStart(2, '0')].map(Number).map(n => persianDigits.format(n)).join('/');
+          } else {
+            const date = jalaliToGregorian(input.value);
+            result.textContent = '🎉 تاریخ میلادی: ' + date;
+          }
+        } catch (error) { result.classList.add('error'); result.textContent = '⚠️ ' + error.message; }
+      }
+      jalaliTab.addEventListener('click', () => {
+        mode = 'jalali'; input.type = 'date'; input.value = ''; input.placeholder = '';
+        label.textContent = '📅 تاریخ میلادی'; result.textContent = '';
+        jalaliTab.classList.add('active'); jalaliTab.setAttribute('aria-selected', 'true');
+        gregorianTab.classList.remove('active'); gregorianTab.setAttribute('aria-selected', 'false');
+      });
+      gregorianTab.addEventListener('click', () => {
+        mode = 'gregorian'; input.type = 'text'; input.value = ''; input.placeholder = '۱۴۰۵/۰۱/۰۱';
+        label.textContent = '📅 تاریخ شمسی (سال/ماه/روز)'; result.textContent = '';
+        gregorianTab.classList.add('active'); gregorianTab.setAttribute('aria-selected', 'true');
+        jalaliTab.classList.remove('active'); jalaliTab.setAttribute('aria-selected', 'false');
+      });
+      document.getElementById('convert').addEventListener('click', convert);
+    })();
+  </script>
+</body>
+</html>

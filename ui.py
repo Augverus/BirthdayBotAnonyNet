@@ -5,8 +5,9 @@ from html import escape
 
 from aiogram.client.session.middlewares.base import BaseRequestMiddleware
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
 
+import config
 import store
 
 EMOJIS = {'edit': '5395444784611480792', 'off': '5240241223632954241',
@@ -18,8 +19,11 @@ BTN_OFF = '🔕 غیرفعال کردن اعلان'
 BTN_ON = '🔔 فعال کردن اعلان'
 BTN_UNTIL = '⏳ چند روز تا تولدم مانده؟'
 BTN_SINCE = '📅 چند روز از تولدم گذشته؟'
-BTN_SUPPORT = '💬 ارتباط با پشتیبانی'
 BTN_ADMIN = '🛠 پنل مدیریت'
+
+
+BTN_FRIENDS = '👥 تولد عزیزان'
+BTN_DATE_CONVERTER = '🗓 تبدیل تاریخ'
 
 
 def icon(key):
@@ -33,13 +37,20 @@ def emoji(key, fallback):
     return f'<tg-emoji emoji-id="{eid}">{alt}</tg-emoji>' if eid else fallback
 
 
-def button(text, data=None, style='primary', key=None, url=None):
+def button(text, data=None, style='primary', key=None, url=None, web_app=None):
     return InlineKeyboardButton(text=text, callback_data=data, url=url, style=style,
-                                icon_custom_emoji_id=icon(key))
+                                icon_custom_emoji_id=icon(key), web_app=web_app)
 
 
 def inline(rows):
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def date_converter_keyboard():
+    if config.WEBAPP_URL:
+        return inline([[button('🚀 باز کردن مبدل تاریخ', style='primary',
+                               web_app=WebAppInfo(url=config.WEBAPP_URL))]])
+    return inline([[button('⚙️ راهنمای فعال‌سازی', 'date:setup', 'primary')]])
 
 
 def home(uid):
@@ -51,7 +62,8 @@ def home(uid):
                 [b(BTN_UNTIL, 'success', 'until'), b(BTN_SINCE, 'primary', 'since')]]
     else:
         rows = [[b(BTN_REGISTER, 'success', 'birthday')]]
-    rows.append([b(BTN_SUPPORT, 'primary')])
+    rows.append([b(BTN_FRIENDS, 'primary')])
+    rows.append([b(BTN_DATE_CONVERTER, 'primary')])
     if uid in store.admins():
         rows.append([b(BTN_ADMIN, 'primary')])
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True, input_field_placeholder='✨ یک گزینه انتخاب کن')

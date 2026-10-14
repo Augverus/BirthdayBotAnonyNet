@@ -3,6 +3,7 @@
 
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -48,3 +49,10 @@ SEND_RATE: int = int(os.getenv("SEND_RATE", "25"))
 UPDATE_CONCURRENCY: int = int(os.getenv("UPDATE_CONCURRENCY", "32"))
 if not 1 <= UPDATE_CONCURRENCY <= 256:
     raise RuntimeError("UPDATE_CONCURRENCY must be between 1 and 256")
+
+# --- Public HTTPS URL for the optional Telegram date-converter Mini App ---
+WEBAPP_URL: str = os.getenv("WEBAPP_URL", "").strip()
+if WEBAPP_URL:
+    parsed_webapp_url = urlparse(WEBAPP_URL)
+    if parsed_webapp_url.scheme != "https" or not parsed_webapp_url.netloc:
+        raise RuntimeError("WEBAPP_URL must be a public HTTPS URL")
