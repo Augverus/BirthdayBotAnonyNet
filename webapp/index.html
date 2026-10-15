@@ -3,30 +3,32 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="dark">
   <title>مبدل تاریخ | تولد عزیزان</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
-    :root { color-scheme: light; --bg: #fbf8ef; --fg: #493b2c; --muted: #8c7b66; --card: #fffdf8; --accent: #b38a32; --accent-dark: #806018; --accentText: #49370f; --line: #e9dfc7; }
+    :root { color-scheme: dark; --bg: #080a0b; --fg: #f4f5f7; --muted: #929b9f; --card: #121719; --accent: #a78bfa; --accent-dark: #c7b8ff; --accentText: #fff; --line: #283033; }
     * { box-sizing: border-box; }
-    body { margin: 0; padding: max(26px, env(safe-area-inset-top)) 18px max(28px, env(safe-area-inset-bottom)); background: radial-gradient(ellipse at 50% 0%, #f3e7c7 0, transparent 48%), var(--bg); color: var(--fg); font: 16px/1.8 system-ui, sans-serif; }
+    body { margin: 0; padding: max(26px, env(safe-area-inset-top)) 18px max(28px, env(safe-area-inset-bottom)); background: radial-gradient(ellipse at 50% 12%, #24183d 0, transparent 48%), var(--bg); color: var(--fg); font: 16px/1.8 system-ui, sans-serif; }
     main { max-width: 540px; margin: 0 auto; }
-    .hero { text-align: center; padding: 10px 8px 20px; }
-    .badge { display: inline-grid; place-items: center; width: 58px; height: 58px; border-radius: 20px; background: linear-gradient(145deg, #ead79e, #fff8e5); box-shadow: 0 7px 18px #8b6c251c; font-size: 29px; margin-bottom: 8px; }
-    h1 { font-size: 1.45rem; margin: 0; letter-spacing: -.02em; }
+    .hero { text-align: center; padding: 18px 8px 24px; }
+    .badge { display: inline-grid; place-items: center; width: 68px; height: 68px; border: 1px solid #8b72dc55; border-radius: 50%; background: radial-gradient(circle at 35% 25%, #30234b, #171222 72%); box-shadow: 0 0 32px #8b65ee35; font-size: 31px; margin-bottom: 13px; }
+    h1 { font-size: 1.5rem; font-weight: 800; margin: 0; letter-spacing: -.02em; }
     .hint { color: var(--muted); margin: 3px 0 0; }
-    .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 5px; border: 1px solid var(--line); border-radius: 16px; background: #fffaf0; margin-bottom: 16px; box-shadow: 0 5px 18px #6c4a1b0a; }
+    .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 5px; border: 1px solid #252c2f; border-radius: 22px; background: #111617; margin-bottom: 18px; box-shadow: 0 8px 24px #0005; }
     button, input { font: inherit; }
-    .tab { border: 0; border-radius: 12px; padding: 11px 7px; color: var(--fg); background: transparent; font-size: .92rem; transition: background .18s ease, color .18s ease, transform .18s ease; }
-    .tab.active { background: linear-gradient(135deg, #d6b65c, #bd9637); color: var(--accentText); box-shadow: 0 4px 12px #9e792b30; }
+    .tab { border: 0; border-radius: 18px; padding: 12px 7px; color: #a0a9ac; background: transparent; font-size: .92rem; font-weight: 700; transition: background .18s ease, color .18s ease, transform .18s ease; }
+    .tab.active { background: linear-gradient(135deg, #8768ef, #6845d2); color: var(--accentText); box-shadow: 0 4px 18px #7958e44d; }
     .tab:active, .convert:active { transform: scale(.98); }
-    .card { padding: 20px; border: 1px solid var(--line); border-radius: 20px; background: linear-gradient(145deg, #fffefa, #fffaf0); box-shadow: 0 12px 32px #6c4a1b12; }
+    .card { padding: 21px; border: 1px solid #252d30; border-radius: 24px; background: linear-gradient(145deg, #151a1c, #101415); box-shadow: 0 12px 34px #0006; }
     label { display: block; font-weight: 700; margin-bottom: 8px; }
-    input { width: 100%; padding: 13px; border: 1px solid #dfd1ad; border-radius: 13px; color: var(--fg); background: #fffaf1; direction: ltr; text-align: center; outline: none; transition: border-color .18s ease, box-shadow .18s ease; }
-    input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px #c3a04425; }
-    .convert { width: 100%; border: 0; border-radius: 13px; padding: 13px; margin-top: 14px; background: linear-gradient(135deg, #d6b65c, #bd9637); color: var(--accentText); font-weight: 750; box-shadow: 0 6px 14px #9e792b26; transition: transform .18s ease; }
-    .result { margin-top: 18px; min-height: 30px; font-weight: 700; color: var(--accent-dark); overflow-wrap: anywhere; }
-    .error { color: #df4b4b; }
+    input { width: 100%; padding: 14px; border: 1px solid #30383b; border-radius: 16px; color: var(--fg); background: #090c0d; direction: ltr; text-align: center; outline: none; color-scheme: dark; transition: border-color .18s ease, box-shadow .18s ease; }
+    input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px #a78bfa25; }
+    .convert { width: 100%; border: 0; border-radius: 999px; padding: 15px; margin-top: 16px; background: linear-gradient(135deg, #8060ed, #633fce); color: var(--accentText); font-weight: 800; box-shadow: 0 7px 22px #7654e44d; transition: transform .18s ease, box-shadow .18s ease; }
+    .convert:hover { box-shadow: 0 9px 28px #8768ef66; }
+    .result { margin-top: 18px; min-height: 30px; font-weight: 750; color: var(--accent-dark); overflow-wrap: anywhere; }
+    .result:not(:empty) { padding: 12px 14px; border: 1px solid #6e58b633; border-radius: 15px; background: #201a30; }
+    .error { color: #ff8e9b; }
     .foot { color: var(--muted); font-size: .88rem; text-align: center; margin: 17px 4px 0; }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; } }
   </style>
