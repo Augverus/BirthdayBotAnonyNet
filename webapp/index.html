@@ -10,7 +10,7 @@
   <style>
     :root { color-scheme: dark; --bg: #080a0b; --fg: #f4f5f7; --muted: #929b9f; --card: #121719; --accent: #a78bfa; --accent-dark: #c7b8ff; --accentText: #fff; --line: #283033; }
     * { box-sizing: border-box; }
-    body { margin: 0; padding: max(18px, env(safe-area-inset-top)) 16px max(26px, env(safe-area-inset-bottom)); background: radial-gradient(ellipse at 50% 0%, #24183d 0, transparent 42%), var(--bg); color: var(--fg); font: 15px/1.7 system-ui, sans-serif; }
+    body { margin: 0; padding: max(18px, env(safe-area-inset-top)) 16px calc(112px + env(safe-area-inset-bottom)); background: radial-gradient(ellipse at 50% 0%, #24183d 0, transparent 42%), var(--bg); color: var(--fg); font: 15px/1.7 system-ui, sans-serif; }
     main { max-width: 540px; margin: 0 auto; }
     .profile-card, .card { border: 1px solid #252d30; border-radius: 24px; background: linear-gradient(145deg, #151a1c, #101415); box-shadow: 0 12px 34px #0006; }
     .profile-card { padding: 18px; margin: 4px 0 16px; }
@@ -62,11 +62,44 @@
     .check-row input { width: 18px; min-height: 18px; accent-color: var(--accent); }
     [hidden] { display: none !important; }
     .foot { color: var(--muted); font-size: .84rem; text-align: center; margin: 17px 4px 0; }
+    .screen { animation: screen-in .2s ease both; }
+    .home-hero { padding: 22px 18px; border: 1px solid #39304e; border-radius: 26px; background: radial-gradient(ellipse at 100% 0, #342556 0, transparent 62%), linear-gradient(145deg, #15151b, #101314); box-shadow: 0 12px 34px #0006; margin: 4px 0 16px; }
+    .home-hero .eyebrow { color: var(--accent-dark); font-size: .88rem; margin: 0 0 4px; }
+    .home-hero h1 { font-size: 1.35rem; }
+    .home-hero p { color: var(--muted); margin: 7px 0 0; }
+    .home-links { display: grid; gap: 10px; margin-top: 14px; }
+    .home-link { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 15px; border: 1px solid #292f32; border-radius: 18px; background: linear-gradient(145deg, #151a1c, #101415); color: var(--fg); text-align: right; font: inherit; font-weight: 750; }
+    .home-link span:last-child { color: var(--accent-dark); font-size: 1.2rem; }
+    .bottom-nav { position: fixed; z-index: 20; left: 16px; right: 16px; bottom: max(12px, env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 540px; margin: 0 auto; padding: 5px; border: 1px solid #39304e; border-radius: 999px; background: rgb(10 11 16 / 94%); box-shadow: 0 10px 32px #0009; backdrop-filter: blur(18px); }
+    .nav-button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-width: 0; min-height: 62px; padding: 5px 2px; border: 1px solid transparent; border-radius: 999px; color: #9296a5; background: transparent; font: inherit; font-size: .72rem; line-height: 1.4; transition: background .18s ease, color .18s ease; }
+    .nav-button svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .nav-button[aria-current="page"] { border-color: #7658d688; color: var(--accent-dark); background: #211a31; }
+    .nav-button:active { transform: scale(.97); }
+    @keyframes screen-in { from { opacity: .55; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    @media (prefers-reduced-motion: reduce) { .screen { animation: none; } }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; } }
   </style>
 </head>
 <body>
   <main>
+    <section class="screen" data-panel="home" aria-labelledby="home-title">
+      <div class="home-hero">
+        <p class="eyebrow">مدیریت تولدهای تو</p>
+        <h1 id="home-title">سلام <span id="home-name">دوست من</span> 👋</h1>
+        <p>همه‌چیز برای تولدهای خودت و عزیزانت، یک‌جا.</p>
+      </div>
+      <div class="birthday-box">
+        <div><strong>🎂 تولد من</strong><span id="home-birthday">در حال بارگذاری…</span></div>
+        <div class="countdown" id="home-countdown"></div>
+      </div>
+      <div class="home-links">
+        <button class="home-link" type="button" data-open-panel="friends"><span>🎈 تولد عزیزان</span><span>←</span></button>
+        <button class="home-link" type="button" data-open-panel="converter"><span>🗓️ تبدیل تاریخ</span><span>←</span></button>
+        <button class="home-link" type="button" data-open-panel="account"><span>👤 پروفایل من</span><span>←</span></button>
+      </div>
+    </section>
+
+    <section class="screen" data-panel="account" hidden>
     <section class="profile-card" aria-label="پروفایل تلگرام">
       <div class="profile-head">
         <div class="avatar" id="profile-avatar" aria-hidden="true">🎂</div>
@@ -83,6 +116,9 @@
       <div class="status" id="api-status" aria-live="polite"></div>
     </section>
 
+    </section>
+
+    <section class="screen" data-panel="converter" hidden>
     <section class="card" aria-labelledby="converter-title">
       <header class="section-heading">
         <h2 id="converter-title">🗓️ تبدیل تاریخ تولد</h2>
@@ -98,6 +134,9 @@
       <div id="result" class="result" aria-live="polite"></div>
     </section>
 
+    </section>
+
+    <section class="screen" data-panel="friends" hidden>
     <section class="card" aria-labelledby="friends-title">
       <header class="section-heading">
         <h2 id="friends-title">👥 تولد عزیزان</h2>
@@ -124,7 +163,14 @@
     </section>
 
     <p class="foot">🔒 اطلاعات تولد فقط برای حساب خودت نمایش داده می‌شه.</p>
+    </section>
   </main>
+  <nav class="bottom-nav" aria-label="منوی اصلی">
+    <button class="nav-button" type="button" data-tab="home" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg><span>خانه</span></button>
+    <button class="nav-button" type="button" data-tab="converter"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg><span>تبدیل</span></button>
+    <button class="nav-button" type="button" data-tab="friends"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2m6-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm6-3a4 4 0 0 1 0 8m2 1a4 4 0 0 1 2 3v1"/></svg><span>عزیزان</span></button>
+    <button class="nav-button" type="button" data-tab="account"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><span>حساب</span></button>
+  </nav>
   <script>
     (() => {
       const app = window.Telegram && window.Telegram.WebApp;
@@ -141,15 +187,29 @@
       const form = document.getElementById('friend-form');
       const formStatus = document.getElementById('form-status');
 
+      function openPanel(name) {
+        document.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== name; });
+        document.querySelectorAll('[data-tab]').forEach(tab => {
+          if (tab.dataset.tab === name) tab.setAttribute('aria-current', 'page');
+          else tab.removeAttribute('aria-current');
+        });
+        if (app && app.HapticFeedback) app.HapticFeedback.selectionChanged();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      document.querySelectorAll('[data-tab]').forEach(tab => tab.addEventListener('click', () => openPanel(tab.dataset.tab)));
+      document.querySelectorAll('[data-open-panel]').forEach(button => button.addEventListener('click', () => openPanel(button.dataset.openPanel)));
+
       function showProfile(user) {
         if (!user) {
           document.getElementById('profile-name').textContent = 'پروفایل تلگرام';
+          document.getElementById('home-name').textContent = 'دوست من';
           document.getElementById('profile-username').textContent = 'مینی‌اپ رو از داخل تلگرام باز کن';
           document.getElementById('profile-id').textContent = '—';
           return;
         }
         const name = [user.first_name, user.last_name].filter(Boolean).join(' ').trim();
         document.getElementById('profile-name').textContent = name || 'کاربر تلگرام';
+        document.getElementById('home-name').textContent = (name || 'دوست من').split(' ')[0];
         document.getElementById('profile-username').textContent = user.username ? '@' + user.username : 'کاربر تلگرام';
         document.getElementById('profile-id').textContent = user.id ? String(user.id) : '—';
         document.getElementById('profile-avatar').textContent = (name || '🎂').slice(0, 1);
@@ -164,12 +224,16 @@
         if (!birthday) {
           birthdayText.textContent = 'تولدت هنوز توی بات ثبت نشده.';
           countdownText.textContent = '';
+          document.getElementById('home-birthday').textContent = 'تولدت هنوز ثبت نشده.';
+          document.getElementById('home-countdown').textContent = '';
           return;
         }
         birthdayText.textContent = `${numberFa.format(birthday.day)} ${months[birthday.month - 1]}`;
+        document.getElementById('home-birthday').textContent = birthdayText.textContent;
         countdownText.textContent = birthday.days_remaining === 0
           ? 'امروز روز توئه 🎉'
           : `${numberFa.format(birthday.days_remaining)} روز مونده`;
+        document.getElementById('home-countdown').textContent = countdownText.textContent;
       }
 
       function renderFriends(friends) {
@@ -228,6 +292,7 @@
       async function loadDashboard() {
         if (!apiBase) {
           birthdayText.textContent = 'برای نمایش تولد، API بات باید راه‌اندازی بشه.';
+          document.getElementById('home-birthday').textContent = 'بعد از راه‌اندازی API نمایش داده می‌شه.';
           friendsList.innerHTML = '<div class="empty-state">بعد از اتصال مینی‌اپ به بات، تولدهای ذخیره‌شده اینجا دیده می‌شن.</div>';
           setStatus('پروفایل از تلگرام نمایش داده می‌شه؛ اطلاعات تولد بعد از راه‌اندازی API بارگذاری می‌شن.');
           return;
@@ -240,6 +305,7 @@
           setStatus('');
         } catch (error) {
           birthdayText.textContent = 'اطلاعات تولد در دسترس نیست.';
+          document.getElementById('home-birthday').textContent = 'فعلاً اطلاعات تولدت در دسترس نیست.';
           friendsList.innerHTML = '<div class="empty-state">فعلاً نتونستم فهرست تولدها رو بگیرم.</div>';
           setStatus(error.message, true);
         }
