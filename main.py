@@ -25,6 +25,14 @@ dp = Dispatcher(events_isolation=SimpleEventIsolation())
 user_router = Router(name='users')
 
 
+def configured_text(key, default, **values):
+    template = store.setting(key, default)
+    rendered = escape(template)
+    for name, value in values.items():
+        rendered = rendered.replace('{' + name + '}', str(value))
+    return rendered
+
+
 @dp.errors()
 async def capture_update_error(event: ErrorEvent):
     error = event.exception
@@ -100,11 +108,12 @@ async def group_event(message, bot, edited=False):
             if user and user['month'] and user['day']:
                 birthday_line = f'{ui.emoji("until", "⏳")} <b>{cal.remaining(user["month"], user["day"])}</b> روز'
             else:
-                birthday_line = 'در گفتگوی خصوصی ربات /start را بزن و تولدت را ثبت کن.'
-            reply = (f'{ui.emoji("since", "📅")} <b>تاریخ</b> :\n'
-                     f'▪️ تاریخ امروز : <b>{today.year}/{today.month:02}/{today.day:02}</b>\n'
-                     '┘─\n'
-                     f'▪️ روز باقی مانده تا تولدم : {birthday_line}')
+                birthday_line = configured_text('birthday_hint', 'برای ثبت تاریخ تولد خود به پیوی ربات مراجعه کنید.')
+            reply = configured_text(
+                'group_date_reply',
+                '{since} <b>تاریخ</b> :\n▪️ تاریخ امروز : <b>{date}</b>\n┘─\n▪️ روز باقی مانده تا تولدم : {birthday}',
+                since=ui.emoji('since', '📅'), date=f'{today.year}/{today.month:02}/{today.day:02}',
+                birthday=birthday_line)
             await message.answer(reply, parse_mode='HTML', reply_to_message_id=message.message_id)
             return
     if command == '/id':
@@ -191,7 +200,7 @@ dp.include_router(admin_panel.router)
 async def greet(message, uid):
     u = store.user(uid)
     welcome = store.setting('welcome', 'به خونهٔ تولدها خوش اومدی! ✨\nتاریخ تولدت رو ثبت کن و شمارش معکوس روز خاصت رو ببین.')
-    text = f'{ui.emoji("birthday", "🎂")} <b>سلام {ui.safe_name(u["name"])}!</b>\n\n{escape(welcome)}'
+    text = f'{ui.emoji("birthday", "🎂")} <b>سلام {ui.safe_name(u["name"])}!</b>\n\n{configured_text("welcome", welcome, name=ui.safe_name(u["name"]))}'
     if u['month']:
         text += f'\n\n{ui.emoji("birthday", "🎂")} تولدت: <b>{cal.birthday_text(u["month"], u["day"])}</b>\n{ui.emoji("until", "⏳")} <b>{cal.remaining(u["month"], u["day"])} روز</b> تا جشن تو!'
     if uid in store.admins():

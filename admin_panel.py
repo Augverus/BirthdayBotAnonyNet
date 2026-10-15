@@ -129,7 +129,9 @@ PROMPTS = {
     'channel': '🔒 کانال عمومی را به شکل @channel بفرستید.\nبرای کانال خصوصی: شناسه عددی کانال و لینک دعوت را با فاصله بفرستید.\nربات باید ادمین کانال باشد.',
     'direct': '✉️ آیدی عددی کاربری که ربات را استارت کرده وارد کنید.',
     'search': '🔎 آیدی عددی کاربر را وارد کنید.',
-    'welcome': '✨ متن خوشامدگویی جدید را بفرستید (حداکثر ۳۰۰۰ نویسه).',
+    'welcome': 'متن خوشامدگویی جدید را بفرستید (حداکثر ۳۰۰۰ نویسه). می‌توانید از {name} استفاده کنید؛ ایموجی‌های معمولی هنگام ارسال به نسخه پریمیوم تبدیل می‌شوند.',
+    'group_date_reply': 'متن پاسخ گروه را بفرستید. متغیرها: {since} {date} {birthday} (حداکثر ۳۰۰۰ نویسه).',
+    'birthday_hint': 'متن راهنمای ثبت تولد را بفرستید (حداکثر ۵۰۰ نویسه).',
     'reminder_time': '🕒 ساعت یادآوری را با فرمت 09:00 وارد کنید.',
     'send_rate': '🚀 حداکثر تعداد ارسال در ثانیه را از ۱ تا ۲۵ وارد کنید.',
     'admin_add': '🛡 آیدی عددی ادمین جدید را وارد کنید.',
@@ -271,7 +273,8 @@ async def admin_callback(callback: CallbackQuery, state: FSMContext, bot):
                     ('notify_admin', '🔔 خبر ورود کاربران', '0'), ('group_reading', '👁 دریافت پیام گروه', '1'), ('custom_emoji', '✨ ایموجی پریمیوم', '0')]
         rows = [[ui.button(f'{label}: {"روشن" if store.setting(key, default)=="1" else "خاموش"}', f'adm:toggle:{key}')]
                 for key, label, default in switches]
-        rows.extend([[ui.button('✏️ متن خوشامد', 'adm:prompt:welcome')],
+        rows.extend([[ui.button('✏️ متن خوشامد', 'adm:prompt:welcome'), ui.button('🗓 پاسخ تاریخ گروه', 'adm:prompt:group_date_reply')],
+                     [ui.button('🎂 راهنمای ثبت تولد', 'adm:prompt:birthday_hint')],
                      [ui.button('🕒 ساعت یادآوری', 'adm:prompt:reminder_time'), ui.button('🚀 سرعت ارسال', 'adm:prompt:send_rate')], back()])
         await render(callback, '⚙️ <b>تنظیمات ربات</b>\n\n'
             f'یادآوری: {store.setting("reminder_time", f"{config.REMINDER_HOUR:02}:{config.REMINDER_MINUTE:02}")} · {escape(config.TIMEZONE)}\n'
@@ -445,10 +448,14 @@ async def admin_input(message: Message, state: FSMContext, bot):
             await state.set_data({'target': uid})
             await message.answer('📨 حالا پیام موردنظر را بفرستید.', reply_markup=cancel_keyboard())
             return
-        elif mode == 'welcome':
+        elif mode in ('welcome', 'group_date_reply'):
             if not text or len(text)>3000:
                 raise ValueError('متن باید بین ۱ تا ۳۰۰۰ نویسه باشد.')
-            store.set_setting('welcome', text)
+            store.set_setting(mode, text)
+        elif mode == 'birthday_hint':
+            if not text or len(text) > 500:
+                raise ValueError('متن باید بین ۱ تا ۵۰۰ نویسه باشد.')
+            store.set_setting(mode, text)
         elif mode == 'reminder_time':
             hour, minute = map(int, text.split(':'))
             if not 0<=hour<=23 or not 0<=minute<=59:
