@@ -56,3 +56,17 @@ if WEBAPP_URL:
     parsed_webapp_url = urlparse(WEBAPP_URL)
     if parsed_webapp_url.scheme != "https" or not parsed_webapp_url.netloc:
         raise RuntimeError("WEBAPP_URL must be a public HTTPS URL")
+
+# --- Mini App API (served by this process; put a TLS reverse proxy in front on a VPS) ---
+WEBAPP_API_HOST: str = os.getenv("WEBAPP_API_HOST", "127.0.0.1")
+WEBAPP_API_PORT: int = int(os.getenv("WEBAPP_API_PORT", os.getenv("PORT", "8080")))
+if not 1 <= WEBAPP_API_PORT <= 65535:
+    raise RuntimeError("WEBAPP_API_PORT must be between 1 and 65535")
+
+WEBAPP_API_ALLOWED_ORIGINS: set[str] = {
+    value.strip().rstrip("/")
+    for value in os.getenv("WEBAPP_API_ALLOWED_ORIGINS", "").split(",")
+    if value.strip()
+}
+if WEBAPP_URL:
+    WEBAPP_API_ALLOWED_ORIGINS.add(f"{parsed_webapp_url.scheme}://{parsed_webapp_url.netloc}")

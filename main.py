@@ -19,6 +19,7 @@ import config
 import runtime_jobs
 import store
 import ui
+import webapp_api
 
 log = logging.getLogger(__name__)
 dp = Dispatcher(events_isolation=SimpleEventIsolation())
@@ -561,22 +562,32 @@ async def _run_bot():
             except TelegramAPIError:
                 store.set_setting('custom_emoji', '0')
                 log.warning('Custom emoji lookup unavailable; using text without icons')
-        tasks = [asyncio.create_task(runtime_jobs.supervised(worker, bot))
-                 for worker in (runtime_jobs.delivery_worker, runtime_jobs.reminder_worker,
-                                runtime_jobs.backup_worker)]
         try:
-            await dp.start_polling(
-                bot,
-                allowed_updates=dp.resolve_used_update_types(),
-                close_bot_session=False,
-                tasks_concurrency_limit=config.UPDATE_CONCURRENCY,
-            )
+            api_runner = await webapp_api.start()
+            log.info('Mini App API listening on %s:%s', config.WEBAPP_API_HOST, config.WEBAPP_API_PORT)
+        except OSError:
+            api_runner = None
+            log.exception('Mini App API could not start; Telegram bot will continue without Mini App data')
+        try:
+            tasks = [asyncio.create_task(runtime_jobs.supervised(worker, bot))
+                     for worker in (runtime_jobs.delivery_worker, runtime_jobs.reminder_worker,
+                                    runtime_jobs.backup_worker)]
+            try:
+                await dp.start_polling(
+                    bot,
+                    allowed_updates=dp.resolve_used_update_types(),
+                    close_bot_session=False,
+                    tasks_concurrency_limit=config.UPDATE_CONCURRENCY,
+                )
+            finally:
+                for task in tasks:
+                    task.cancel()
+                for task in tasks:
+                    with suppress(asyncio.CancelledError):
+                        await task
         finally:
-            for task in tasks:
-                task.cancel()
-            for task in tasks:
-                with suppress(asyncio.CancelledError):
-                    await task
+            if api_runner:
+                await api_runner.cleanup()
 
 
 async def main():
