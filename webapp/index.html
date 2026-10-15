@@ -17,6 +17,7 @@
     .profile-head { display: flex; align-items: center; gap: 14px; }
     .avatar { display: grid; place-items: center; flex: 0 0 58px; width: 58px; height: 58px; overflow: hidden; border: 2px solid #a78bfa; border-radius: 50%; background: #24183d; color: var(--accent-dark); font-size: 23px; font-weight: 800; box-shadow: 0 0 18px #8b65ee35; }
     .profile-copy { min-width: 0; }
+    .avatar img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
     h1 { margin: 0; overflow-wrap: anywhere; font-size: 1.2rem; font-weight: 800; }
     .username { margin: 2px 0 0; color: var(--accent-dark); direction: ltr; text-align: right; }
     .profile-id { display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; padding: 8px 11px; border: 1px solid #292f32; border-radius: 13px; background: #0b0e0f; color: var(--muted); font-size: .88rem; }
@@ -212,7 +213,30 @@
         document.getElementById('home-name').textContent = (name || 'دوست من').split(' ')[0];
         document.getElementById('profile-username').textContent = user.username ? '@' + user.username : 'کاربر تلگرام';
         document.getElementById('profile-id').textContent = user.id ? String(user.id) : '—';
-        document.getElementById('profile-avatar').textContent = (name || '🎂').slice(0, 1);
+        const avatar = document.getElementById('profile-avatar');
+        const initial = (name || '🎂').slice(0, 1);
+        const photoUrl = typeof user.photo_url === 'string' ? user.photo_url : '';
+        let safePhotoUrl = '';
+        try {
+          const parsedPhotoUrl = new URL(photoUrl);
+          if (parsedPhotoUrl.protocol === 'https:') safePhotoUrl = parsedPhotoUrl.href;
+        } catch { /* Telegram may omit the optional photo URL. */ }
+        if (safePhotoUrl) {
+          let image = avatar.querySelector('img');
+          if (!image || image.dataset.photoUrl !== safePhotoUrl) {
+            image = document.createElement('img');
+            image.alt = name ? 'عکس پروفایل ' + name : 'عکس پروفایل تلگرام';
+            image.loading = 'eager';
+            image.decoding = 'async';
+            image.referrerPolicy = 'no-referrer';
+            image.dataset.photoUrl = safePhotoUrl;
+            image.addEventListener('error', () => { image.remove(); avatar.textContent = initial; }, { once: true });
+            avatar.replaceChildren(image);
+            image.src = safePhotoUrl;
+          }
+        } else if (!avatar.querySelector('img')) {
+          avatar.textContent = initial;
+        }
       }
 
       function setStatus(message, isError = false) {
