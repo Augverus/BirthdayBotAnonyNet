@@ -61,12 +61,12 @@ cp .env.example .env
 
 `main.py` مسیر کاربر/گروه و راه‌اندازی، `admin_panel.py` پنل، `store.py` داده‌ها، `ui.py` دکمه‌ها و ایموجی، `calendar_utils.py` تاریخ، `runtime_jobs.py` صف ارسال و یادآوری.
 
-فایل‌های `admin.py`، `handlers.py`، `database.py`، `channel_lock.py`، `jobs.py` و `sender.py` از نسخه‌های قبلی باقی مانده‌اند و در نقطه ورود فعلی استفاده نمی‌شوند.
-
 ## بررسی
 
 تست‌ها از تلگرام شبیه‌سازی‌شده و دیتابیس موقت استفاده می‌کنند و پیام واقعی ارسال نمی‌کنند:
 
 ```sh
-.venv/bin/python -m unittest discover -s tests -v
+.venv/bin/python -m unittest discover -s tests -t . -v
 ```
+
+تست‌ها به `BOT_TOKEN` واقعی نیاز ندارند؛ ماژول `tests/__init__.py` پیش از ایمپورت `config` یک توکن ساختگی و `ADMIN_IDS` آزمایشی تنظیم می‌کند و هر تست روی یک فایل SQLite موقت اجرا می‌شود.
