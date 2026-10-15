@@ -50,6 +50,22 @@ class MiddlewareTestCase(AsyncBotTestCase):
         await self.run_mw(message)
         self.assertIn('/groupmonitor off', message.last_answer)
 
+    async def test_group_birthday_keyword_replies_when_bot_is_admin(self):
+        self.bot.member_status = 'administrator'
+        store.track_user(user(9, 'Neo'), 'k', 'message')
+        store.update_user(9, month=12, day=1)
+        message = self.group_msg('تاریخ', message_id=22)
+        await self.run_mw(message)
+        self.assertIn('تاریخ امروز', message.last_answer)
+        self.assertIn('روز باقی مانده', message.last_answer)
+        self.assertEqual(message.answers[-1]['reply_to_message_id'], 22)
+
+    async def test_group_birthday_keyword_is_ignored_when_bot_is_not_admin(self):
+        self.bot.member_status = 'member'
+        message = self.group_msg('تولدم')
+        await self.run_mw(message)
+        self.assertIsNone(message.last_answer)
+
     async def test_groupmonitor_requires_group_admin(self):
         self.bot.member_status = 'member'
         message = self.group_msg('/groupmonitor off')

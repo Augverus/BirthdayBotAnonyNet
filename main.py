@@ -88,6 +88,25 @@ async def group_event(message, bot, edited=False):
         me = await bot.me()
         if text[0].split('@', 1)[1].lower() != (me.username or '').lower():
             return
+    body = ' '.join((message.text or message.caption or '').casefold().split())
+    if any(keyword in body for keyword in ('تاریخ', 'تولدم', 'تولد من')):
+        try:
+            member = await bot.get_chat_member(message.chat.id, bot.id)
+        except TelegramAPIError:
+            member = None
+        if member and member.status in ('administrator', 'creator'):
+            today = cal.today()
+            user = store.user(message.from_user.id) if message.from_user else None
+            if user and user['month'] and user['day']:
+                birthday_line = f'{ui.emoji("until", "⏳")} <b>{cal.remaining(user["month"], user["day"])}</b> روز'
+            else:
+                birthday_line = 'در گفتگوی خصوصی ربات /start را بزن و تولدت را ثبت کن.'
+            reply = (f'{ui.emoji("since", "📅")} <b>تاریخ</b> :\n'
+                     f'▪️ تاریخ امروز : <b>{today.year}/{today.month:02}/{today.day:02}</b>\n'
+                     '┘─\n'
+                     f'▪️ روز باقی مانده تا تولدم : {birthday_line}')
+            await message.answer(reply, parse_mode='HTML', reply_to_message_id=message.message_id)
+            return
     if command == '/id':
         uid = message.from_user.id if message.from_user else 'نامعلوم'
         await message.answer(f'شناسه شما: {uid}\nشناسه گروه: {message.chat.id}')
@@ -534,7 +553,8 @@ async def _run_bot():
                 store.set_setting('custom_emoji', '0')
                 log.warning('Custom emoji lookup unavailable; using text without icons')
         tasks = [asyncio.create_task(runtime_jobs.supervised(worker, bot))
-                 for worker in (runtime_jobs.delivery_worker, runtime_jobs.reminder_worker)]
+                 for worker in (runtime_jobs.delivery_worker, runtime_jobs.reminder_worker,
+                                runtime_jobs.backup_worker)]
         try:
             await dp.start_polling(
                 bot,

@@ -1,7 +1,10 @@
 """Persistent message delivery queue, rate limiting and daily reminders."""
 import asyncio
 import logging
+import sqlite3
+from datetime import datetime, timezone
 from html import escape
+from pathlib import Path
 
 from aiogram.exceptions import TelegramForbiddenError, TelegramRetryAfter, TelegramBadRequest, TelegramAPIError
 
@@ -11,6 +14,43 @@ import store
 import ui
 
 log = logging.getLogger(__name__)
+
+
+def create_backup():
+    source_path = Path(config.DB_PATH)
+    if not source_path.exists() or str(config.DB_PATH) == ':memory:':
+        return None
+    backup_dir = Path(config.BASE_DIR) / 'backups' / 'automatic'
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S-%f')
+    target_path = backup_dir / f'birthdays-{stamp}.db'
+    source = sqlite3.connect(source_path)
+    target = sqlite3.connect(target_path)
+    try:
+        source.backup(target)
+    finally:
+        target.close()
+        source.close()
+    target_path.chmod(0o600)
+    backups = sorted(backup_dir.glob('birthdays-*.db'), key=lambda p: p.stat().st_mtime, reverse=True)
+    for old in backups[7:]:
+        old.unlink(missing_ok=True)
+    return target_path
+
+
+async def backup_worker(bot):
+    while True:
+        try:
+            path = await asyncio.to_thread(create_backup)
+            if path:
+                log.info('Automatic database backup created: %s', path)
+        except Exception as exc:
+            log.exception('Automatic database backup failed: %s', exc)
+            try:
+                store.record_error('backup_worker', f'{type(exc).__name__}: {exc}')
+            except Exception:
+                log.exception('Could not persist backup error')
+        await asyncio.sleep(24 * 60 * 60)
 
 
 def rate():

@@ -1,6 +1,7 @@
 """Tests for the delivery queue, reminder worker and supervisor."""
 import asyncio
 import contextlib
+import sqlite3
 from unittest.mock import AsyncMock, patch
 
 import jdatetime
@@ -64,6 +65,18 @@ class CopyOneTestCase(AsyncBotTestCase):
             ok, error = await runtime_jobs.copy_one(Bot(), 7, 1, 2)
         self.assertFalse(ok)
         self.assertEqual(error, 'NetworkOrRateLimit')
+
+
+class BackupTestCase(AsyncBotTestCase):
+    async def test_create_backup_copies_database_and_retains_seven(self):
+        for _ in range(8):
+            path = runtime_jobs.create_backup()
+            self.assertIsNotNone(path)
+        from pathlib import Path
+        files = list(Path(self._tmp.name, 'backups', 'automatic').glob('*.db'))
+        self.assertEqual(len(files), 7)
+        with sqlite3.connect(files[0]) as conn:
+            self.assertIsNotNone(conn.execute('SELECT 1 FROM settings LIMIT 1').fetchone())
 
     async def test_rate_is_clamped_between_one_and_twenty_five(self):
         store.set_setting('send_rate', '0')
