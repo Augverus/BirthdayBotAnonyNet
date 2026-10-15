@@ -82,7 +82,7 @@ async def delivery_worker(bot):
                 c.execute("UPDATE bot_jobs SET status='done',completed_at=? WHERE id=?", (store.now(), job['id']))
             try:
                 await bot.send_message(job['admin_id'],
-                    f"✅ ارسال #{job['id']} تمام شد.\nموفق: {counts['sent']}\nناموفق: {counts['failed']}")
+                    f"ارسال #{job['id']} تمام شد.\nموفق: {counts['sent']}\nناموفق: {counts['failed']}")
             except TelegramAPIError:
                 log.warning('Could not deliver completion report for job %s', job['id'])
 
@@ -108,7 +108,7 @@ async def reminder_worker(bot):
                 if store.friend_reminder_sent(owner_id, day_key):
                     continue
                 people = ', '.join(f'<b>{escape(name)}</b>' for name in names)
-                text = f'🎂 Today is {people}’s birthday!'
+                text = f'امروز تولد {people} است!'
                 try:
                     await send_slot(bot)
                     await bot.send_message(owner_id, text, parse_mode='HTML')
@@ -130,7 +130,7 @@ async def reminder_worker(bot):
                 if sent:
                     continue
                 days = cal.remaining(u['month'], u['day'])
-                text = '🎉🎂 تولدت مبارک! امروز روز توئه ✨' if days == 0 else f'🎂 {days} روز تا تولدت مونده!\n🎈 {cal.birthday_text(u["month"], u["day"])}'
+                text = 'تولدت مبارک! امروز روز توئه!' if days == 0 else f'{days} روز تا تولدت مونده!\n{cal.birthday_text(u["month"], u["day"])}'
                 try:
                     await send_slot(bot)
                     await bot.send_message(u['id'], text)
