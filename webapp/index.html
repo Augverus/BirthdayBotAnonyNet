@@ -18,6 +18,11 @@
     .avatar { display: grid; place-items: center; flex: 0 0 58px; width: 58px; height: 58px; overflow: hidden; border: 2px solid #a78bfa; border-radius: 50%; background: #24183d; color: var(--accent-dark); font-size: 23px; font-weight: 800; box-shadow: 0 0 18px #8b65ee35; }
     .profile-copy { min-width: 0; }
     .avatar img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+    .visual-icon { width: 1.18em; height: 1.18em; margin-inline-end: .22em; vertical-align: -.2em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; color: var(--accent-dark); }
+    .animated-icon { animation: icon-glow 2.2s ease-in-out infinite alternate; }
+    .icon-label { display: inline-flex; align-items: center; gap: .35em; }
+    @keyframes icon-glow { from { filter: drop-shadow(0 0 0 #a78bfa00); transform: translateY(0); } to { filter: drop-shadow(0 0 5px #a78bfa99); transform: translateY(-1px); } }
+    @media (prefers-reduced-motion: reduce) { .animated-icon { animation: none; } }
     h1 { margin: 0; overflow-wrap: anywhere; font-size: 1.2rem; font-weight: 800; }
     .username { margin: 2px 0 0; color: var(--accent-dark); direction: ltr; text-align: right; }
     .profile-id { display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; padding: 8px 11px; border: 1px solid #292f32; border-radius: 13px; background: #0b0e0f; color: var(--muted); font-size: .88rem; }
@@ -86,24 +91,24 @@
     <section class="screen" data-panel="home" aria-labelledby="home-title">
       <div class="home-hero">
         <p class="eyebrow">مدیریت تولدهای تو</p>
-        <h1 id="home-title">سلام <span id="home-name">دوست من</span> 👋</h1>
+        <h1 id="home-title">سلام <span id="home-name">دوست من</span> <svg class="visual-icon animated-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2z"/><path d="m19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z"/></svg></h1>
         <p>همه‌چیز برای تولدهای خودت و عزیزانت، یک‌جا.</p>
       </div>
       <div class="birthday-box">
-        <div><strong>🎂 تولد من</strong><span id="home-birthday">در حال بارگذاری…</span></div>
+        <div><strong><svg class="visual-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14v9H5zM3 12h18M12 12v9M12 12c-4 0-5-2-5-4 3 0 5 1 5 4zm0 0c0-3 2-5 5-5 0 3-2 5-5 5z"/></svg> تولد من</strong><span id="home-birthday">در حال بارگذاری…</span></div>
         <div class="countdown" id="home-countdown"></div>
       </div>
       <div class="home-links">
-        <button class="home-link" type="button" data-open-panel="friends"><span>🎈 تولد عزیزان</span><span>←</span></button>
-        <button class="home-link" type="button" data-open-panel="converter"><span>🗓️ تبدیل تاریخ</span><span>←</span></button>
-        <button class="home-link" type="button" data-open-panel="account"><span>👤 پروفایل من</span><span>←</span></button>
+        <button class="home-link" type="button" data-open-panel="friends"><span><svg class="visual-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="7" r="3"/><circle cx="16" cy="7" r="3"/><path d="M8 10v8l-2 3m10-11v8l2 3M8 18h8"/></svg> تولد عزیزان</span><span>←</span></button>
+        <button class="home-link" type="button" data-open-panel="converter"><span><svg class="visual-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18m-13 4h2m4 0h2m-8 4h2"/></svg> تبدیل تاریخ</span><span>←</span></button>
+        <button class="home-link" type="button" data-open-panel="account"><span><svg class="visual-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> پروفایل من</span><span>←</span></button>
       </div>
     </section>
 
     <section class="screen" data-panel="account" hidden>
     <section class="profile-card" aria-label="پروفایل تلگرام">
       <div class="profile-head">
-        <div class="avatar" id="profile-avatar" aria-hidden="true">🎂</div>
+        <div class="avatar" id="profile-avatar" aria-hidden="true">ک</div>
         <div class="profile-copy">
           <h1 id="profile-name">پروفایل تلگرام</h1>
           <p class="username" id="profile-username">در حال دریافت اطلاعات…</p>
@@ -111,7 +116,7 @@
       </div>
       <div class="profile-id"><span>شناسهٔ کاربری</span><strong id="profile-id">—</strong></div>
       <div class="birthday-box">
-        <div><strong>🎂 تولد من</strong><span id="my-birthday">در حال بارگذاری…</span></div>
+        <div><strong><svg class="visual-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14v9H5zM3 12h18M12 12v9M12 12c-4 0-5-2-5-4 3 0 5 1 5 4zm0 0c0-3 2-5 5-5 0 3-2 5-5 5z"/></svg> تولد من</strong><span id="my-birthday">در حال بارگذاری…</span></div>
         <div class="countdown" id="my-countdown"></div>
       </div>
       <div class="status" id="api-status" aria-live="polite"></div>
@@ -122,7 +127,7 @@
     <section class="screen" data-panel="converter" hidden>
     <section class="card" aria-labelledby="converter-title">
       <header class="section-heading">
-        <h2 id="converter-title">🗓️ تبدیل تاریخ تولد</h2>
+        <h2 id="converter-title"><svg class="visual-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18m-13 4h2m4 0h2m-8 4h2"/></svg> تبدیل تاریخ تولد</h2>
         <p>شمسی و میلادی رو به هم تبدیل کن.</p>
       </header>
       <div class="tabs" role="tablist" aria-label="جهت تبدیل تاریخ">
@@ -140,7 +145,7 @@
     <section class="screen" data-panel="friends" hidden>
     <section class="card" aria-labelledby="friends-title">
       <header class="section-heading">
-        <h2 id="friends-title">👥 تولد عزیزان</h2>
+        <h2 id="friends-title"><svg class="visual-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2m3-13a3 3 0 0 1 0 6m1 2a5 5 0 0 1 3 5"/></svg> تولد عزیزان</h2>
         <p>تولدهایی که برای دوست‌ها و خانواده‌ات ثبت کردی.</p>
       </header>
       <div class="friend-list" id="friends-list" aria-live="polite">
@@ -163,7 +168,7 @@
       </form>
     </section>
 
-    <p class="foot">🔒 اطلاعات تولد فقط برای حساب خودت نمایش داده می‌شه.</p>
+    <p class="foot"><svg class="visual-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3m-4 4v3"/></svg> اطلاعات تولد فقط برای حساب خودت نمایش داده می‌شه.</p>
     </section>
   </main>
   <nav class="bottom-nav" aria-label="منوی اصلی">
@@ -214,7 +219,7 @@
         document.getElementById('profile-username').textContent = user.username ? '@' + user.username : 'کاربر تلگرام';
         document.getElementById('profile-id').textContent = user.id ? String(user.id) : '—';
         const avatar = document.getElementById('profile-avatar');
-        const initial = (name || '🎂').slice(0, 1);
+        const initial = (name || 'ک').slice(0, 1);
         const photoUrl = typeof user.photo_url === 'string' ? user.photo_url : '';
         let safePhotoUrl = '';
         try {
@@ -239,6 +244,31 @@
         }
       }
 
+      function createIcon(name) {
+        const paths = {
+          celebrate: [['path', { d: 'm12 2 1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2z' }], ['path', { d: 'm19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z' }]],
+          leaf: [['path', { d: 'M20 4c-8 0-14 3-14 10a6 6 0 0 0 6 6c7 0 8-8 8-16z' }], ['path', { d: 'M4 21c3-5 7-8 12-11' }]],
+          bell: [['path', { d: 'M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12h4' }]],
+          bellOff: [['path', { d: 'M3 3l18 18M10 5a6 6 0 0 1 8 5c0 7 3 7 3 9H8m-4 0c0-2 3-2 3-9a6 6 0 0 1 .5-2.5M10 21h4' }]],
+          warning: [['path', { d: 'M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0z' }], ['path', { d: 'M12 9v4m0 3h.01' }]]
+        };
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('class', 'visual-icon');
+        svg.setAttribute('aria-hidden', 'true');
+        for (const [tag, attrs] of paths[name] || paths.celebrate) {
+          const shape = document.createElementNS('http://www.w3.org/2000/svg', tag);
+          for (const [key, value] of Object.entries(attrs)) shape.setAttribute(key, value);
+          svg.append(shape);
+        }
+        return svg;
+      }
+      function setIconLabel(target, iconName, text) {
+        const icon = createIcon(iconName);
+        icon.classList.add('animated-icon');
+        target.replaceChildren(icon, document.createTextNode(text));
+      }
+
       function setStatus(message, isError = false) {
         status.textContent = message;
         status.classList.toggle('error', isError);
@@ -254,10 +284,10 @@
         }
         birthdayText.textContent = `${numberFa.format(birthday.day)} ${months[birthday.month - 1]}`;
         document.getElementById('home-birthday').textContent = birthdayText.textContent;
-        countdownText.textContent = birthday.days_remaining === 0
-          ? 'امروز روز توئه 🎉'
-          : `${numberFa.format(birthday.days_remaining)} روز مونده`;
-        document.getElementById('home-countdown').textContent = countdownText.textContent;
+        if (birthday.days_remaining === 0) setIconLabel(countdownText, 'celebrate', 'امروز روز توئه');
+        else countdownText.textContent = `${numberFa.format(birthday.days_remaining)} روز مونده`;
+        const homeCountdown = document.getElementById('home-countdown');
+        homeCountdown.replaceChildren(...Array.from(countdownText.childNodes, node => node.cloneNode(true)));
       }
 
       function renderFriends(friends) {
@@ -265,7 +295,7 @@
         if (!friends.length) {
           const empty = document.createElement('div');
           empty.className = 'empty-state';
-          empty.textContent = 'هنوز تولدی اضافه نکردی؛ از دکمهٔ پایین شروع کن 🌱';
+          setIconLabel(empty, 'leaf', 'هنوز تولدی اضافه نکردی؛ از دکمهٔ پایین شروع کن');
           friendsList.append(empty);
           return;
         }
@@ -282,12 +312,11 @@
           date.textContent = `${numberFa.format(friend.day)} ${months[friend.month - 1]}`;
           const days = document.createElement('div');
           days.className = 'friend-days';
-          days.textContent = friend.days_remaining === 0
-            ? 'امروز تولدشه 🎉'
-            : `${numberFa.format(friend.days_remaining)} روز مونده`;
+          if (friend.days_remaining === 0) setIconLabel(days, 'celebrate', 'امروز تولدشه');
+          else days.textContent = `${numberFa.format(friend.days_remaining)} روز مونده`;
           const reminder = document.createElement('div');
           reminder.className = 'friend-reminder';
-          reminder.textContent = friend.notification ? '🔔 یادآوری روشنه' : '🔕 یادآوری خاموشه';
+          setIconLabel(reminder, friend.notification ? 'bell' : 'bellOff', friend.notification ? 'یادآوری روشنه' : 'یادآوری خاموشه');
           info.append(name, date, days, reminder);
           const remove = document.createElement('button');
           remove.className = 'delete-friend';
@@ -385,12 +414,12 @@
             const date = new Date(input.value + 'T00:00:00Z');
             if (Number.isNaN(date.valueOf())) throw new Error('این تاریخ معتبر نیست؛ دوباره انتخابش کن.');
             const [year, month, day] = jalaliParts(date);
-            result.textContent = '🎉 شمسیش می‌شه: ' + [year, String(month).padStart(2, '0'), String(day).padStart(2, '0')].map(Number).map(n => persianDigits.format(n)).join('/');
+            setIconLabel(result, 'celebrate', 'شمسیش می‌شه: ' + [year, String(month).padStart(2, '0'), String(day).padStart(2, '0')].map(Number).map(n => persianDigits.format(n)).join('/'));
           } else {
             const date = jalaliToGregorian(input.value);
-            result.textContent = '🎉 میلادیش می‌شه: ' + date;
+            setIconLabel(result, 'celebrate', 'میلادیش می‌شه: ' + date);
           }
-        } catch (error) { result.classList.add('error'); result.textContent = '⚠️ ' + error.message; }
+        } catch (error) { result.classList.add('error'); setIconLabel(result, 'warning', error.message); }
       }
       jalaliTab.addEventListener('click', () => {
         mode = 'jalali'; input.type = 'date'; input.value = ''; input.placeholder = '';
