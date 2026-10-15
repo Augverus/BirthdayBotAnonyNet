@@ -8,6 +8,7 @@ from aiogram.exceptions import TelegramForbiddenError, TelegramRetryAfter, Teleg
 import calendar_utils as cal
 import config
 import store
+import ui
 
 log = logging.getLogger(__name__)
 
@@ -108,7 +109,7 @@ async def reminder_worker(bot):
                 if store.friend_reminder_sent(owner_id, day_key):
                     continue
                 people = ', '.join(f'<b>{escape(name)}</b>' for name in names)
-                text = f'🎂 Today is {people}’s birthday!'
+                text = f'{ui.emoji("birthday", "🎂")} امروز تولد {people} است!'
                 try:
                     await send_slot(bot)
                     await bot.send_message(owner_id, text, parse_mode='HTML')
@@ -130,10 +131,10 @@ async def reminder_worker(bot):
                 if sent:
                     continue
                 days = cal.remaining(u['month'], u['day'])
-                text = '🎉🎂 تولدت مبارک! امروز روز توئه ✨' if days == 0 else f'🎂 {days} روز تا تولدت مونده!\n🎈 {cal.birthday_text(u["month"], u["day"])}'
+                text = f'{ui.emoji("birthday", "🎂")} تولدت مبارک! امروز روز توئه!' if days == 0 else f'{ui.emoji("until", "⏳")} {days} روز تا تولدت مونده!\n{ui.emoji("birthday", "🎂")} {cal.birthday_text(u["month"], u["day"])}'
                 try:
                     await send_slot(bot)
-                    await bot.send_message(u['id'], text)
+                    await bot.send_message(u['id'], text, parse_mode='HTML')
                 except TelegramForbiddenError:
                     store.update_user(u['id'], blocked=1)
                 except TelegramRetryAfter as exc:

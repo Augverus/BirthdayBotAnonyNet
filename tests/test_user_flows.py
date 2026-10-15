@@ -294,7 +294,7 @@ class UserFlowTestCase(AsyncBotTestCase):
         self.assertIn('<tg-emoji', markup)
         self.assertIn('🎂', markup)
         store.set_setting('custom_emoji', '0')
-        self.assertEqual(ui.emoji('birthday', '🎂'), '🎂')
+        self.assertEqual(ui.emoji('birthday', '🎂'), '')
 
 
 if __name__ == '__main__':

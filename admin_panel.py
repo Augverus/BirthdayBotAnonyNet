@@ -276,7 +276,7 @@ async def admin_callback(callback: CallbackQuery, state: FSMContext, bot):
         await render(callback, '⚙️ <b>تنظیمات ربات</b>\n\n'
             f'یادآوری: {store.setting("reminder_time", f"{config.REMINDER_HOUR:02}:{config.REMINDER_MINUTE:02}")} · {escape(config.TIMEZONE)}\n'
             f'سرعت: {store.setting("send_rate", str(config.SEND_RATE))} پیام/ثانیه\n'
-            'ایموجی پریمیوم به مجوز تلگرام برای بات وابسته است؛ در صورت خطا خودکار به ایموجی معمولی برمی‌گردد.', ui.inline(rows))
+            'ایموجی پریمیوم به مجوز تلگرام برای بات وابسته است؛ در صورت خطا آیکن حذف می‌شود و متن باقی می‌ماند.', ui.inline(rows))
     elif action == 'toggle':
         key = parts[2]
         defaults = {'maintenance':'0', 'reminders_enabled':'0', 'notify_admin':'0', 'group_reading':'1', 'custom_emoji':'0'}

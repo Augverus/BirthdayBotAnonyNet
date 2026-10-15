@@ -124,6 +124,8 @@ class AccessMiddleware(BaseMiddleware):
         if isinstance(event, Message) and event.chat.type in ('group', 'supergroup'):
             await group_event(event, bot, bool(event.edit_date))
             return
+        if isinstance(event, Message) and event.text in ui.LEGACY_LABELS:
+            event = event.model_copy(update={'text': ui.LEGACY_LABELS[event.text]})
         message = event if isinstance(event, Message) else event.message
         if not message or message.chat.type != 'private' or not event.from_user or event.from_user.is_bot:
             return
@@ -172,7 +174,7 @@ async def greet(message, uid):
     welcome = store.setting('welcome', 'به خونهٔ تولدها خوش اومدی! ✨\nتاریخ تولدت رو ثبت کن و شمارش معکوس روز خاصت رو ببین.')
     text = f'{ui.emoji("birthday", "🎂")} <b>سلام {ui.safe_name(u["name"])}!</b>\n\n{escape(welcome)}'
     if u['month']:
-        text += f'\n\n🎈 تولدت: <b>{cal.birthday_text(u["month"], u["day"])}</b>\n⏳ <b>{cal.remaining(u["month"], u["day"])} روز</b> تا جشن تو!'
+        text += f'\n\n{ui.emoji("birthday", "🎂")} تولدت: <b>{cal.birthday_text(u["month"], u["day"])}</b>\n{ui.emoji("until", "⏳")} <b>{cal.remaining(u["month"], u["day"])} روز</b> تا جشن تو!'
     if uid in store.admins():
         text += '\n\n🛠 پنل مدیریت: /admin'
     await message.answer(text, parse_mode='HTML', reply_markup=ui.home(uid))
@@ -215,7 +217,7 @@ async def friends_entry(message: Message, state: FSMContext):
 @user_router.message(F.text == ui.BTN_DATE_CONVERTER)
 async def date_converter_entry(message: Message):
     if config.WEBAPP_URL:
-        text = '🗓 <b>مبدل تاریخ</b>\n\nتقویم شمسی و میلادی را به‌سادگی به هم تبدیل کن 🌱'
+        text = f'{ui.emoji("since", "📅")} <b>مبدل تاریخ</b>\n\nتقویم شمسی و میلادی را به‌سادگی به هم تبدیل کن.'
     else:
         text = ('🗓 <b>مبدل تاریخ شمسی و میلادی</b>\n\n'
                 'برای فعال شدن مینی‌اپ، نشانی HTTPS آن را در <code>WEBAPP_URL</code> فایل .env قرار بده.')
@@ -230,18 +232,18 @@ async def date_converter_setup(callback: CallbackQuery):
 def friends_listing(uid):
     rows = store.friend_birthdays(uid)
     if not rows:
-        return ('🎂 <b>تولد عزیزان</b>\n\nهنوز تولدی ثبت نکرده‌ای.\n'
-                'با افزودن تاریخ تولد عزیزانت، روز تولدشان را فراموش نکن ✨',
+        return (f'{ui.emoji("birthday", "🎂")} <b>تولد عزیزان</b>\n\nهنوز تولدی ثبت نکرده‌ای.\n'
+                'با افزودن تاریخ تولد عزیزانت، روز تولدشان را فراموش نکن.',
                 ui.inline([[ui.button('➕ افزودن تولد', 'friend:add', 'success')]]))
     digits = str.maketrans('0123456789', '۰۱۲۳۴۵۶۷۸۹')
-    lines = ['🎂 <b>تولد عزیزان</b>', '']
+    lines = [f'{ui.emoji("birthday", "🎂")} <b>تولد عزیزان</b>', '']
     buttons = []
     for row in rows:
         days_left = cal.remaining(row['month'], row['day'])
         days = str(days_left).translate(digits)
-        timing = '🎉 امروز تولدشه!' if days_left == 0 else f'⏳ {days} روز تا تولدش مانده'
-        reminder = '🔔 یادآوری روشن' if row['notification'] else '🔕 یادآوری خاموش'
-        lines.append(f"🎈 <b>{escape(row['name'])}</b> — {cal.birthday_text(row['month'], row['day'])}\n{timing} · {reminder}")
+        timing = f'{ui.emoji("birthday", "🎂")} امروز تولدشه!' if days_left == 0 else f'{ui.emoji("until", "⏳")} {days} روز تا تولدش مانده'
+        reminder = f'{ui.emoji("on", "🔔")} یادآوری روشن' if row['notification'] else f'{ui.emoji("off", "🔕")} یادآوری خاموش'
+        lines.append(f"<b>{escape(row['name'])}</b> — {cal.birthday_text(row['month'], row['day'])}\n{timing} · {reminder}")
         buttons.append([ui.button(f"🗑 حذف {row['name'][:24]}", f"friend:delete:{row['id']}", 'danger')])
     buttons.append([ui.button('➕ افزودن تولد', 'friend:add', 'success')])
     return '\n\n'.join(lines), ui.inline(buttons)
@@ -378,7 +380,7 @@ async def cancel_handler(message: Message, state: FSMContext):
 @user_router.message(F.text.in_({ui.BTN_REGISTER, '🟢 ثبت تولد', ui.BTN_EDIT}))
 async def register_handler(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer('🗓 <b>ماه تولدت رو انتخاب کن</b>\nتاریخ‌ها شمسی هستند 🌸', reply_markup=months_keyboard(), parse_mode='HTML')
+    await message.answer(f'{ui.emoji("since", "📅")} <b>ماه تولدت رو انتخاب کن</b>\nتاریخ‌ها شمسی هستند.', reply_markup=months_keyboard(), parse_mode='HTML')
 
 
 @user_router.callback_query(F.data.in_({'set_birthday', 'back_to_months'}))
@@ -402,8 +404,8 @@ async def month_handler(callback: CallbackQuery):
 async def save_birthday(message, uid, month, day, bot):
     store.update_user(uid, month=month, day=day, notification=1)
     days = cal.remaining(month, day)
-    text = f'{ui.emoji("on", "✅")} <b>تولدت ثبت شد!</b>\n\n🎂 {cal.birthday_text(month, day)}\n'
-    text += '🎉 امروز روز توئه؛ تولدت مبارک!' if days==0 else f'⏳ <b>{days} روز</b> تا جشن تولدت ✨'
+    text = f'{ui.emoji("on", "✅")} <b>تولدت ثبت شد!</b>\n\n{ui.emoji("birthday", "🎂")} {cal.birthday_text(month, day)}\n'
+    text += f'{ui.emoji("birthday", "🎂")} امروز روز توئه؛ تولدت مبارک!' if days==0 else f'{ui.emoji("until", "⏳")} <b>{days} روز</b> تا جشن تولدت!'
     await message.answer(text, parse_mode='HTML', reply_markup=ui.home(uid))
     await notify_admin(bot, f'🎂 تولد ثبت شد.\nشناسه: <code>{uid}</code>\n{cal.birthday_text(month,day)}', uid)
 
@@ -453,7 +455,8 @@ async def notification_handler(message: Message):
         return
     enabled = message.text == ui.BTN_ON
     store.update_user(uid, notification=int(enabled))
-    await message.answer('🔔 اعلان‌های تولدت فعال شد ✨' if enabled else '🔕 اعلان‌های تولدت خاموش شد.', reply_markup=ui.home(uid))
+    text = f'{ui.emoji("on", "🔔")} اعلان‌های تولدت فعال شد.' if enabled else f'{ui.emoji("off", "🔕")} اعلان‌های تولدت خاموش شد.'
+    await message.answer(text, parse_mode='HTML', reply_markup=ui.home(uid))
 
 
 @user_router.message(Command('mybirthday'))
@@ -465,8 +468,8 @@ async def birthday_handler(message: Message):
         return
     since = message.text == ui.BTN_SINCE
     days = cal.elapsed(u['month'],u['day']) if since else cal.remaining(u['month'],u['day'])
-    text = f'🎂 <b>{cal.birthday_text(u["month"],u["day"])}</b>\n\n'
-    text += f'📅 {days} روز از آخرین تولدت گذشته.' if since else ('🎉 تولدت مبارک! امروز روز توئه ✨' if days==0 else f'⏳ فقط <b>{days} روز</b> تا تولدت!')
+    text = f'{ui.emoji("birthday", "🎂")} <b>{cal.birthday_text(u["month"],u["day"])}</b>\n\n'
+    text += f'{ui.emoji("since", "📅")} {days} روز از آخرین تولدت گذشته.' if since else (f'{ui.emoji("birthday", "🎂")} تولدت مبارک! امروز روز توئه!' if days==0 else f'{ui.emoji("until", "⏳")} فقط <b>{days} روز</b> تا تولدت!')
     await message.answer(text, parse_mode='HTML', reply_markup=ui.home(message.from_user.id))
 
 
@@ -529,7 +532,7 @@ async def _run_bot():
                     store.set_setting('custom_emoji', '0')
             except TelegramAPIError:
                 store.set_setting('custom_emoji', '0')
-                log.warning('Custom emoji lookup unavailable; using ordinary emoji')
+                log.warning('Custom emoji lookup unavailable; using text without icons')
         tasks = [asyncio.create_task(runtime_jobs.supervised(worker, bot))
                  for worker in (runtime_jobs.delivery_worker, runtime_jobs.reminder_worker)]
         try:
