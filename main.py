@@ -1,17 +1,17 @@
 """Birthday bot runtime: private user flows, admin router and group observation."""
 import asyncio
-import logging
 import json
+import logging
 from contextlib import suppress
 from html import escape
 
 from aiogram import BaseMiddleware, Bot, Dispatcher, F, Router
-from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import SimpleEventIsolation
-from aiogram.types import Message, CallbackQuery, ErrorEvent
+from aiogram.types import CallbackQuery, ErrorEvent, Message
 
 import admin_panel
 import calendar_utils as cal
@@ -32,6 +32,15 @@ def configured_text(key, default, **values):
     for name, value in values.items():
         rendered = rendered.replace('{' + name + '}', str(value))
     return rendered
+
+
+DEFAULT_DATE_KEYWORDS = 'تاریخ,تولدم,تولد من'
+
+
+def date_question(body):
+    """True when a group message asks for the date; keywords come from settings."""
+    configured = store.setting('group_date_keywords', DEFAULT_DATE_KEYWORDS)
+    return any(word.strip() in body for word in configured.split(',') if word.strip())
 
 
 @dp.errors()
@@ -98,7 +107,7 @@ async def group_event(message, bot, edited=False):
         if text[0].split('@', 1)[1].lower() != (me.username or '').lower():
             return
     body = ' '.join((message.text or message.caption or '').casefold().split())
-    if any(keyword in body for keyword in ('تاریخ', 'تولدم', 'تولد من')):
+    if date_question(body):
         try:
             member = await bot.get_chat_member(message.chat.id, bot.id)
         except TelegramAPIError:
@@ -258,24 +267,62 @@ async def date_converter_setup(callback: CallbackQuery):
     await callback.answer('ابتدا WEBAPP_URL را در فایل .env تنظیم کن.', show_alert=True)
 
 
-def friends_listing(uid):
+FRIENDS_PAGE_SIZE = 5
+
+
+def friends_listing(uid, offset=0):
     rows = store.friend_birthdays(uid)
     if not rows:
-        return (f'{ui.emoji("birthday", "🎂")} <b>تولد عزیزان</b>\n\nهنوز تولدی ثبت نکرده‌ای.\n'
-                'با افزودن تاریخ تولد عزیزانت، روز تولدشان را فراموش نکن.',
+        return ((f'{ui.emoji("birthday", "🎂")} <b>تولد عزیزان</b>\n\nهنوز تولدی ثبت نکرده‌ای.\n'
+                 'با افزودن تاریخ تولد عزیزانت، روز تولدشان را فراموش نکن.'),
                 ui.inline([[ui.button('➕ افزودن تولد', 'friend:add', 'success')]]))
+    offset = max(0, min(int(offset), (len(rows) - 1) // FRIENDS_PAGE_SIZE * FRIENDS_PAGE_SIZE))
+    page = rows[offset:offset + FRIENDS_PAGE_SIZE]
     digits = str.maketrans('0123456789', '۰۱۲۳۴۵۶۷۸۹')
-    lines = [f'{ui.emoji("birthday", "🎂")} <b>تولد عزیزان</b>', '']
+    lines = [f'{ui.emoji("birthday", "🎂")} <b>تولد عزیزان</b>']
     buttons = []
-    for row in rows:
+    for row in page:
         days_left = cal.remaining(row['month'], row['day'])
         days = str(days_left).translate(digits)
         timing = f'{ui.emoji("birthday", "🎂")} امروز تولدشه!' if days_left == 0 else f'{ui.emoji("until", "⏳")} {days} روز تا تولدش مانده'
         reminder = f'{ui.emoji("on", "🔔")} یادآوری روشن' if row['notification'] else f'{ui.emoji("off", "🔕")} یادآوری خاموش'
         lines.append(f"<b>{escape(row['name'])}</b> — {cal.birthday_text(row['month'], row['day'])}\n{timing} · {reminder}")
-        buttons.append([ui.button(f"🗑 حذف {row['name'][:24]}", f"friend:delete:{row['id']}", 'danger')])
+        buttons.append([
+            ui.button('🔕 خاموش کردن یادآوری' if row['notification'] else '🔔 روشن کردن یادآوری',
+                      f"friend:toggle:{row['id']}:{offset}"),
+            ui.button('🗑 حذف', f"friend:del:{row['id']}:{offset}", 'danger'),
+        ])
+    nav = []
+    if offset:
+        nav.append(ui.button('⬅️ قبلی', f'friend:list:{max(0, offset - FRIENDS_PAGE_SIZE)}'))
+    if offset + FRIENDS_PAGE_SIZE < len(rows):
+        nav.append(ui.button('بعدی ➡️', f'friend:list:{offset + FRIENDS_PAGE_SIZE}'))
+    if nav:
+        buttons.append(nav)
     buttons.append([ui.button('➕ افزودن تولد', 'friend:add', 'success')])
+    if len(rows) > FRIENDS_PAGE_SIZE:
+        pages = (len(rows) + FRIENDS_PAGE_SIZE - 1) // FRIENDS_PAGE_SIZE
+        current = str(offset // FRIENDS_PAGE_SIZE + 1).translate(digits)
+        lines.append(f'📄 صفحه {current} از {str(pages).translate(digits)}')
     return '\n\n'.join(lines), ui.inline(buttons)
+
+
+def parse_friend_reference(data):
+    """Extract (friend_id, page_offset) from friend callbacks; None when malformed."""
+    parts = data.split(':')
+    if len(parts) < 3:
+        return None
+    try:
+        friend_id = int(parts[2])
+    except ValueError:
+        return None
+    offset = 0
+    if len(parts) > 3:
+        try:
+            offset = max(0, int(parts[3]))
+        except ValueError:
+            offset = 0
+    return friend_id, offset
 
 
 @user_router.callback_query(F.data == 'friend:add')
@@ -367,22 +414,59 @@ async def friend_save(callback: CallbackQuery, state: FSMContext):
 
 
 @user_router.callback_query(F.data == 'friend:list')
+@user_router.callback_query(F.data.startswith('friend:list:'))
 async def friend_list(callback: CallbackQuery):
     await callback.answer()
-    text, keyboard = friends_listing(callback.from_user.id)
+    offset = 0
+    if callback.data.startswith('friend:list:'):
+        with suppress(ValueError):
+            offset = max(0, int(callback.data.rsplit(':', 1)[1]))
+    text, keyboard = friends_listing(callback.from_user.id, offset)
+    await callback.message.edit_text(text, parse_mode='HTML', reply_markup=keyboard)
+
+
+@user_router.callback_query(F.data.startswith('friend:del:'))
+async def friend_delete_prompt(callback: CallbackQuery):
+    parsed = parse_friend_reference(callback.data)
+    friend = store.friend_birthday(callback.from_user.id, parsed[0]) if parsed else None
+    if not friend:
+        await callback.answer('تولد پیدا نشد.', show_alert=True)
+        return
+    await callback.answer()
+    await callback.message.edit_text(
+        f"🗑 تولد <b>{escape(friend['name'])}</b> حذف شود؟",
+        parse_mode='HTML',
+        reply_markup=ui.inline([
+            [ui.button('🗑 بله، حذف کن', f"friend:delete:{parsed[0]}:{parsed[1]}", 'danger')],
+            [ui.button('↩️ انصراف', f'friend:list:{parsed[1]}')]]))
+
+
+@user_router.callback_query(F.data.startswith('friend:toggle:'))
+async def friend_toggle(callback: CallbackQuery):
+    parsed = parse_friend_reference(callback.data)
+    if not parsed:
+        await callback.answer('این مورد معتبر نیست.', show_alert=True)
+        return
+    friend_id, offset = parsed
+    state = store.toggle_friend_notification(callback.from_user.id, friend_id)
+    if state is None:
+        await callback.answer('تولد پیدا نشد.', show_alert=True)
+    else:
+        await callback.answer('🔔 یادآوری روشن شد.' if state else '🔕 یادآوری خاموش شد.')
+    text, keyboard = friends_listing(callback.from_user.id, offset)
     await callback.message.edit_text(text, parse_mode='HTML', reply_markup=keyboard)
 
 
 @user_router.callback_query(F.data.startswith('friend:delete:'))
 async def friend_delete(callback: CallbackQuery):
-    try:
-        friend_id = int(callback.data.rsplit(':', 1)[1])
-    except ValueError:
+    parsed = parse_friend_reference(callback.data)
+    if not parsed:
         await callback.answer('این مورد معتبر نیست.', show_alert=True)
         return
+    friend_id, offset = parsed
     deleted = store.delete_friend_birthday(callback.from_user.id, friend_id)
     await callback.answer('حذف شد.' if deleted else 'تولد پیدا نشد.', show_alert=not deleted)
-    text, keyboard = friends_listing(callback.from_user.id)
+    text, keyboard = friends_listing(callback.from_user.id, offset)
     await callback.message.edit_text(text, parse_mode='HTML', reply_markup=keyboard)
 
 

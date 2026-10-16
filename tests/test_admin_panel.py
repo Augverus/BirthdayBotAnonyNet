@@ -2,11 +2,8 @@
 from types import SimpleNamespace
 
 import admin_panel
-import config
 import store
-import ui
-from tests.support import (AsyncBotTestCase, FakeBot, FakeCallback, FakeMessage,
-                           FakeState, api_error, private_chat, user)
+from tests.support import AsyncBotTestCase, FakeBot, FakeCallback, FakeMessage, FakeState, api_error, private_chat, user
 
 ADMIN = 1001
 OTHER_OWNER = 1002
@@ -296,7 +293,7 @@ class AdminPanelTestCase(AsyncBotTestCase):
         self.assertEqual(store.job(jid)['status'], 'draft')
 
     async def test_direct_message_to_single_user(self):
-        callback = await self.call('adm:direct:7')
+        await self.call('adm:direct:7')
         self.assertEqual(self.state.data, {'target': 7})
         await admin_panel.admin_content(self.msg('hi 7'), self.state, self.bot)
         with store.connection() as c:
@@ -330,6 +327,42 @@ class AdminPanelTestCase(AsyncBotTestCase):
         self.assertIn(f'#{jid}', page.message.last_edit)
         await self.call(f'adm:stop:{jid}')
         self.assertEqual(store.job(jid)['status'], 'cancelled')
+
+    async def test_jobs_page_offers_retry_for_failed_deliveries(self):
+        jid = store.create_draft(ADMIN, ADMIN, 5, None)
+        store.enqueue(jid, ADMIN)
+        with store.connection() as c:
+            c.execute("UPDATE bot_deliveries SET status='failed',error='BadRequest' WHERE job_id=? AND user_id=7", (jid,))
+            c.execute("UPDATE bot_deliveries SET status='sent' WHERE job_id=? AND user_id=?", (jid, ADMIN))
+            c.execute("UPDATE bot_jobs SET status='done' WHERE id=?", (jid,))
+        page = await self.call('adm:jobs')
+        datas = [b.callback_data for row in page.message.edits[-1]['reply_markup'].inline_keyboard
+                 for b in row if b.callback_data]
+        self.assertIn(f'adm:retry:{jid}', datas)
+
+        retried = await self.call(f'adm:retry:{jid}')
+        self.assertIn('صف', retried.message.last_answer)
+        counts = store.job_counts(jid)
+        self.assertEqual((counts['failed'], counts['pending']), (0, 1))
+        self.assertEqual(store.job(jid)['status'], 'queued')
+
+    async def test_retry_rejects_foreign_job(self):
+        jid = store.create_draft(OTHER_OWNER, OTHER_OWNER, 5, None)
+        store.enqueue(jid, OTHER_OWNER)
+        callback = await self.call(f'adm:retry:{jid}')
+        self.assertIn('موردی برای تلاش مجدد نیست', callback.message.last_answer)
+        self.assertEqual(store.job_counts(jid)['pending'], 2)  # admin + plain user, untouched
+
+    async def test_group_date_keywords_validation(self):
+        await self.call('adm:prompt:group_date_keywords')
+        await admin_panel.admin_input(self.msg('تاریخ، تولدم ,  تولد من  '), self.state, self.bot)
+        self.assertEqual(store.setting('group_date_keywords'), 'تاریخ,تولدم,تولد من')
+
+        await self.call('adm:prompt:group_date_keywords')
+        too_long = self.msg('x' * 201)
+        await admin_panel.admin_input(too_long, self.state, self.bot)
+        self.assertIn('معتبر نیست', too_long.last_answer)
+        self.assertEqual(store.setting('group_date_keywords'), 'تاریخ,تولدم,تولد من')
 
     # --- groups ------------------------------------------------------------
     async def test_group_pages_toggle_and_copy(self):

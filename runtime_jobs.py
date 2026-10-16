@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from html import escape
 from pathlib import Path
 
-from aiogram.exceptions import TelegramForbiddenError, TelegramRetryAfter, TelegramBadRequest, TelegramAPIError
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 
 import calendar_utils as cal
 import config
@@ -163,13 +163,7 @@ async def reminder_worker(bot):
                     continue
                 else:
                     store.mark_friend_reminder(owner_id, day_key)
-            for u in store.all_users():
-                if not u['month'] or not u['notification'] or u['blocked'] or u['banned']:
-                    continue
-                with store.connection() as c:
-                    sent = c.execute('SELECT 1 FROM bot_reminders WHERE user_id=? AND day=?', (u['id'], day_key)).fetchone()
-                if sent:
-                    continue
+            for u in store.users_to_remind(day_key):
                 days = cal.remaining(u['month'], u['day'])
                 text = f'{ui.emoji("birthday", "🎂")} تولدت مبارک! امروز روز توئه!' if days == 0 else f'{ui.emoji("until", "⏳")} {days} روز تا تولدت مونده!\n{ui.emoji("birthday", "🎂")} {cal.birthday_text(u["month"], u["day"])}'
                 try:

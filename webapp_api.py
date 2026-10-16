@@ -1,8 +1,8 @@
 """Small authenticated API used by the Telegram Mini App."""
 from datetime import datetime, timezone
 
-from aiohttp import web
 from aiogram.utils.web_app import safe_parse_webapp_init_data
+from aiohttp import web
 
 import calendar_utils as cal
 import config
@@ -27,7 +27,7 @@ async def _cors(request, handler):
             response = error
     if origin:
         response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
         response.headers["Access-Control-Max-Age"] = "600"
         response.headers["Vary"] = "Origin"
@@ -44,7 +44,7 @@ def _telegram_user(request):
     try:
         data = safe_parse_webapp_init_data(config.BOT_TOKEN, init_data)
     except (ValueError, TypeError):
-        raise web.HTTPUnauthorized(text="ورود تلگرام تأیید نشد.")
+        raise web.HTTPUnauthorized(text="ورود تلگرام تأیید نشد.") from None
     if not data.user:
         raise web.HTTPUnauthorized(text="شناسهٔ تلگرام در اطلاعات ورود نیست.")
     auth_date = data.auth_date
@@ -65,13 +65,30 @@ def _profile(user):
     }
 
 
-def _birthday_record(month, day):
-    return {
+def _valid_month_day(month, day):
+    return (isinstance(month, int) and not isinstance(month, bool)
+            and isinstance(day, int) and not isinstance(day, bool)
+            and cal.valid_birthday(month, day))
+
+
+async def _json_payload(request):
+    try:
+        payload = await request.json()
+    except (ValueError, web.HTTPBadRequest):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _birthday_record(month, day, notification=None):
+    record = {
         "month": month,
         "day": day,
         "date": cal.birthday_text(month, day),
         "days_remaining": cal.remaining(month, day),
     }
+    if notification is not None:
+        record["notification"] = bool(notification)
+    return record
 
 
 def _friend_record(row):
@@ -99,28 +116,47 @@ async def dashboard(request):
     record = store.user(telegram_user.id)
     birthday = None
     if record and record["month"] and record["day"]:
-        birthday = _birthday_record(record["month"], record["day"])
+        birthday = _birthday_record(record["month"], record["day"], record["notification"])
     friends = [_friend_record(row) for row in store.friend_birthdays(telegram_user.id)]
     return web.json_response({"profile": _profile(telegram_user), "birthday": birthday, "friends": friends})
+
+
+async def set_birthday(request):
+    telegram_user = _telegram_user(request)
+    if not store.claim_rate_limit(telegram_user.id, "miniapp_set_birthday", 2):
+        return _json_error(429, "یک لحظه صبر کن و دوباره امتحان کن.")
+    payload = await _json_payload(request)
+    if payload is None:
+        return _json_error(400, "اطلاعات فرم درست نیست.")
+    month, day = payload.get("month"), payload.get("day")
+    notification = payload.get("notification")
+    if not _valid_month_day(month, day):
+        return _json_error(400, "تاریخ تولد را بررسی کن.")
+    if notification is not None and not isinstance(notification, bool):
+        return _json_error(400, "اطلاعات فرم درست نیست.")
+    if not store.user(telegram_user.id):
+        return _json_error(404, "اول ربات را در تلگرام استارت کن.")
+    values = {"month": month, "day": day}
+    if notification is not None:
+        values["notification"] = int(notification)
+    store.update_user(telegram_user.id, **values)
+    record = store.user(telegram_user.id)
+    return web.json_response({
+        "birthday": _birthday_record(record["month"], record["day"], record["notification"])})
 
 
 async def add_friend(request):
     telegram_user = _telegram_user(request)
     if not store.claim_rate_limit(telegram_user.id, "miniapp_add_friend", 2):
         return _json_error(429, "یک لحظه صبر کن و دوباره امتحان کن.")
-    try:
-        payload = await request.json()
-    except (ValueError, web.HTTPBadRequest):
-        return _json_error(400, "اطلاعات فرم درست نیست.")
-    if not isinstance(payload, dict):
+    payload = await _json_payload(request)
+    if payload is None:
         return _json_error(400, "اطلاعات فرم درست نیست.")
     name = " ".join(str(payload.get("name", "")).split())
     month = payload.get("month")
     day = payload.get("day")
     notification = payload.get("notification", True)
-    if (not name or len(name) > 80 or isinstance(month, bool) or not isinstance(month, int)
-            or isinstance(day, bool) or not isinstance(day, int)
-            or not cal.valid_birthday(month, day) or not isinstance(notification, bool)):
+    if not name or len(name) > 80 or not _valid_month_day(month, day) or not isinstance(notification, bool):
         return _json_error(400, "نام یا تاریخ تولد را بررسی کن.")
     try:
         friend_id = store.add_friend_birthday(telegram_user.id, name, month, day, notification)
@@ -134,8 +170,28 @@ async def add_friend(request):
     })}, status=201)
 
 
+async def update_friend(request):
+    telegram_user = _telegram_user(request)
+    if not store.claim_rate_limit(telegram_user.id, "miniapp_update_friend", 1):
+        return _json_error(429, "یک لحظه صبر کن و دوباره امتحان کن.")
+    try:
+        friend_id = int(request.match_info["friend_id"])
+    except ValueError:
+        return _json_error(400, "این مورد معتبر نیست.")
+    payload = await _json_payload(request)
+    notification = payload.get("notification") if payload else None
+    if friend_id < 1 or not isinstance(notification, bool):
+        return _json_error(400, "اطلاعات فرم درست نیست.")
+    if not store.set_friend_notification(telegram_user.id, friend_id, notification):
+        return _json_error(404, "این تولد پیدا نشد.")
+    friend = store.friend_birthday(telegram_user.id, friend_id)
+    return web.json_response({"friend": _friend_record(friend)})
+
+
 async def delete_friend(request):
     telegram_user = _telegram_user(request)
+    if not store.claim_rate_limit(telegram_user.id, "miniapp_delete_friend", 1):
+        return _json_error(429, "یک لحظه صبر کن و دوباره امتحان کن.")
     try:
         friend_id = int(request.match_info["friend_id"])
     except ValueError:
@@ -151,7 +207,9 @@ def create_app():
     app = web.Application(client_max_size=16 * 1024, middlewares=[_cors])
     app.router.add_get("/health", health)
     app.router.add_get("/api/dashboard", dashboard)
+    app.router.add_post("/api/birthday", set_birthday)
     app.router.add_post("/api/friends", add_friend)
+    app.router.add_patch("/api/friends/{friend_id}", update_friend)
     app.router.add_delete("/api/friends/{friend_id}", delete_friend)
     app.router.add_route("OPTIONS", "/{path:.*}", preflight)
     return app

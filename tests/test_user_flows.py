@@ -6,8 +6,7 @@ import config
 import main
 import store
 import ui
-from tests.support import (AsyncBotTestCase, FakeBot, FakeCallback, FakeMessage,
-                           FakeState, private_chat, user)
+from tests.support import AsyncBotTestCase, FakeBot, FakeCallback, FakeMessage, FakeState, private_chat, user
 
 
 class UserFlowTestCase(AsyncBotTestCase):
@@ -235,6 +234,71 @@ class UserFlowTestCase(AsyncBotTestCase):
         callback = self.cb('friend:delete:abc')
         await main.friend_delete(callback)
         self.assertTrue(callback.answers[-1]['show_alert'])
+
+    async def test_friend_delete_prompts_for_confirmation_first(self):
+        fid = store.add_friend_birthday(7, 'Sam', 3, 3, True)
+        prompt = self.cb(f'friend:del:{fid}:0')
+        await main.friend_delete_prompt(prompt)
+        self.assertIn('حذف شود؟', prompt.message.last_edit)
+        self.assertEqual(len(store.friend_birthdays(7)), 1)
+        datas = [b.callback_data for row in prompt.message.edits[-1]['reply_markup'].inline_keyboard for b in row]
+        self.assertIn(f'friend:delete:{fid}:0', datas)
+        self.assertIn('friend:list:0', datas)
+
+    async def test_friend_delete_prompt_for_unknown_friend(self):
+        prompt = self.cb('friend:del:999:0')
+        await main.friend_delete_prompt(prompt)
+        self.assertTrue(prompt.answers[-1]['show_alert'])
+
+    async def test_friend_reminder_toggle(self):
+        fid = store.add_friend_birthday(7, 'Sam', 3, 3, True)
+        toggle = self.cb(f'friend:toggle:{fid}:0')
+        await main.friend_toggle(toggle)
+        self.assertEqual(store.friend_birthday(7, fid)['notification'], 0)
+        await main.friend_toggle(self.cb(f'friend:toggle:{fid}:0'))
+        self.assertEqual(store.friend_birthday(7, fid)['notification'], 1)
+
+    async def test_friend_toggle_unknown_friend_keeps_listing(self):
+        toggle = self.cb('friend:toggle:999:0')
+        await main.friend_toggle(toggle)
+        self.assertTrue(toggle.answers[-1]['show_alert'])
+
+    async def test_friend_toggle_malformed_reference(self):
+        toggle = self.cb('friend:toggle:abc')
+        await main.friend_toggle(toggle)
+        self.assertTrue(toggle.answers[-1]['show_alert'])
+
+    async def test_friend_listing_paginates_and_keeps_messages_bounded(self):
+        for i in range(7):
+            store.add_friend_birthday(7, f'Friend{i} ', 2, 1, True)
+        first = self.cb('friend:list')
+        await main.friend_list(first)
+        self.assertIn('Friend0', first.message.last_edit)
+        self.assertNotIn('Friend6', first.message.last_edit)
+        self.assertIn('صفحه ۱ از ۲', first.message.last_edit)
+        self.assertLess(len(first.message.last_edit), 4096)
+
+        second = self.cb('friend:list:5')
+        await main.friend_list(second)
+        self.assertIn('Friend6', second.message.last_edit)
+        self.assertNotIn('Friend0', second.message.last_edit)
+        self.assertIn('صفحه ۲ از ۲', second.message.last_edit)
+
+    async def test_friend_listing_clamps_out_of_range_offset(self):
+        fid = store.add_friend_birthday(7, 'Only', 2, 1, True)
+        callback = self.cb('friend:list:25')
+        await main.friend_list(callback)
+        self.assertIn('Only', callback.message.last_edit)
+        self.assertIn(f'friend:del:{fid}:0', [b.callback_data
+                     for row in callback.message.edits[-1]['reply_markup'].inline_keyboard
+                     for b in row if b.callback_data])
+
+    async def test_friend_reference_parser(self):
+        self.assertEqual(main.parse_friend_reference('friend:delete:12:5'), (12, 5))
+        self.assertEqual(main.parse_friend_reference('friend:delete:12'), (12, 0))
+        self.assertEqual(main.parse_friend_reference('friend:delete:12:zz'), (12, 0))
+        self.assertIsNone(main.parse_friend_reference('friend:delete'))
+        self.assertIsNone(main.parse_friend_reference('friend:delete:abc'))
 
     # --- date converter mini app ------------------------------------------
     async def test_date_converter_guides_when_webapp_missing(self):

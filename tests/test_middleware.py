@@ -3,8 +3,16 @@ from unittest.mock import patch
 
 import main
 import store
-from tests.support import (AsyncBotTestCase, FakeBot, FakeCallback, FakeMessage,
-                           api_error, group_chat, private_chat, user)
+from tests.support import (
+    AsyncBotTestCase,
+    FakeBot,
+    FakeCallback,
+    FakeMessage,
+    api_error,
+    group_chat,
+    private_chat,
+    user,
+)
 
 
 class MiddlewareTestCase(AsyncBotTestCase):
@@ -65,6 +73,23 @@ class MiddlewareTestCase(AsyncBotTestCase):
         message = self.group_msg('تولدم')
         await self.run_mw(message)
         self.assertIsNone(message.last_answer)
+
+    async def test_group_date_keywords_are_configurable(self):
+        self.bot.member_status = 'administrator'
+        store.set_setting('group_date_keywords', 'ساعت چند,تاریخ')
+        default_word = self.group_msg('تولدم')
+        await self.run_mw(default_word)
+        self.assertIsNone(default_word.last_answer)
+
+        configured = self.group_msg('بچه‌ها تاریخ چیه؟')
+        await self.run_mw(configured)
+        self.assertIn('تاریخ امروز', configured.last_answer)
+
+    async def test_group_date_keywords_default_when_setting_missing(self):
+        self.bot.member_status = 'administrator'
+        message = self.group_msg('تولدم')
+        await self.run_mw(message)
+        self.assertIn('تاریخ امروز', message.last_answer)
 
     async def test_groupmonitor_requires_group_admin(self):
         self.bot.member_status = 'member'

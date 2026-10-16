@@ -3,12 +3,12 @@ import csv
 import io
 from html import escape
 
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import BufferedInputFile, Message, CallbackQuery
+from aiogram.types import BufferedInputFile, CallbackQuery, Message
 
 import calendar_utils as cal
 import config
@@ -131,6 +131,7 @@ PROMPTS = {
     'search': '🔎 آیدی عددی کاربر را وارد کنید.',
     'welcome': 'متن خوشامدگویی جدید را بفرستید (حداکثر ۳۰۰۰ نویسه). می‌توانید از {name} استفاده کنید؛ ایموجی‌های معمولی هنگام ارسال به نسخه پریمیوم تبدیل می‌شوند.',
     'group_date_reply': 'متن پاسخ گروه را بفرستید. متغیرها: {since} {date} {birthday} (حداکثر ۳۰۰۰ نویسه).',
+    'group_date_keywords': 'کلمات کلیدی پاسخ تاریخ در گروه را با کاما جدا کنید (حداکثر ۲۰۰ نویسه).\nنمونه: تاریخ,تولدم,تولد من',
     'birthday_hint': 'متن راهنمای ثبت تولد را بفرستید (حداکثر ۵۰۰ نویسه).',
     'reminder_time': '🕒 ساعت یادآوری را با فرمت 09:00 وارد کنید.',
     'send_rate': '🚀 حداکثر تعداد ارسال در ثانیه را از ۱ تا ۲۵ وارد کنید.',
@@ -260,8 +261,19 @@ async def admin_callback(callback: CallbackQuery, state: FSMContext, bot):
             lines.append(f'#{j["id"]} · {labels.get(j["status"], j["status"])}\n✅ {counts["sent"]}  ❌ {counts["failed"]}  ⏳ {counts["pending"]}')
             if j['status'] in ('running', 'queued'):
                 rows.append([ui.button(f'✖️ توقف ارسال #{j["id"]}', f'adm:stop:{j["id"]}', 'danger')])
+            if counts['failed'] and j['status'] in ('done', 'cancelled'):
+                rows.append([ui.button(f'🔁 تلاش مجدد ناموفق‌ها #{j["id"]}', f'adm:retry:{j["id"]}')])
         rows.extend([[ui.button('🔄 تازه‌سازی', 'adm:jobs')], back()])
         await render(callback, '\n\n'.join(lines), ui.inline(rows))
+    elif action == 'retry':
+        jid = int(parts[2])
+        moved = store.requeue_failed(jid, aid)
+        if not moved:
+            await callback.message.answer('موردی برای تلاش مجدد نیست؛ ممکن است ارسال‌های ناموفق این کار متعلق به شما نباشد.')
+            return
+        store.audit(aid, 'retry_failed', f'{jid}:{moved}')
+        await callback.message.answer(f'🔁 {moved} ارسال ناموفق دوباره در صف قرار گرفت.',
+                                      reply_markup=ui.inline([[ui.button('📨 گزارش ارسال‌ها', 'adm:jobs')]]))
     elif action == 'stop':
         jid = int(parts[2])
         with store.connection() as c:
@@ -274,7 +286,7 @@ async def admin_callback(callback: CallbackQuery, state: FSMContext, bot):
         rows = [[ui.button(f'{label}: {"روشن" if store.setting(key, default)=="1" else "خاموش"}', f'adm:toggle:{key}')]
                 for key, label, default in switches]
         rows.extend([[ui.button('✏️ متن خوشامد', 'adm:prompt:welcome'), ui.button('🗓 پاسخ تاریخ گروه', 'adm:prompt:group_date_reply')],
-                     [ui.button('🎂 راهنمای ثبت تولد', 'adm:prompt:birthday_hint')],
+                     [ui.button('🎂 راهنمای ثبت تولد', 'adm:prompt:birthday_hint'), ui.button('💬 کلمات کلیدی تاریخ', 'adm:prompt:group_date_keywords')],
                      [ui.button('🕒 ساعت یادآوری', 'adm:prompt:reminder_time'), ui.button('🚀 سرعت ارسال', 'adm:prompt:send_rate')], back()])
         await render(callback, '⚙️ <b>تنظیمات ربات</b>\n\n'
             f'یادآوری: {store.setting("reminder_time", f"{config.REMINDER_HOUR:02}:{config.REMINDER_MINUTE:02}")} · {escape(config.TIMEZONE)}\n'
@@ -293,7 +305,7 @@ async def admin_callback(callback: CallbackQuery, state: FSMContext, bot):
         rows = []
         if aid in config.ADMIN_IDS:
             rows = [[ui.button('➕ افزودن مدیر', 'adm:prompt:admin_add', 'success'), ui.button('➖ حذف مدیر', 'adm:prompt:admin_remove', 'danger')]]
-        await render(callback, text, ui.inline(rows+[back()]))
+        await render(callback, text, ui.inline([*rows, back()]))
     elif action == 'admin_confirm':
         if aid not in config.ADMIN_IDS:
             return
@@ -322,14 +334,14 @@ async def admin_callback(callback: CallbackQuery, state: FSMContext, bot):
             nav.append(ui.button('بعدی ➡️', f'adm:groups:{offset+8}'))
         if nav:
             rows.append(nav)
-        await render(callback, '👁 <b>گروه‌ها</b>\n\nفقط پیام‌هایی که تلگرام از زمان اجرای این نسخه به بات تحویل می‌دهد قابل مشاهده‌اند.\nبرای دریافت همه پیام‌ها، بات را ادمین گروه کنید یا Privacy Mode را در BotFather خاموش کنید.\nآخرین ۱۰۰۰ پیام هر گروه نگه داشته می‌شود.', ui.inline(rows+[back()]))
+        await render(callback, '👁 <b>گروه‌ها</b>\n\nفقط پیام‌هایی که تلگرام از زمان اجرای این نسخه به بات تحویل می‌دهد قابل مشاهده‌اند.\nبرای دریافت همه پیام‌ها، بات را ادمین گروه کنید یا Privacy Mode را در BotFather خاموش کنید.\nآخرین ۱۰۰۰ پیام هر گروه نگه داشته می‌شود.', ui.inline([*rows, back()]))
     elif action == 'group':
         gid, offset = int(parts[2]), max(0, int(parts[3]))
         g = next((g for g in store.groups() if g['id'] == gid), None)
         if not g:
             return
-        lines = [f'👁 <b>{escape(g["title"])}</b>\nشناسه: <code>{gid}</code>\n'
-                 f'ثبت پیام: {"روشن" if g["enabled"] else "خاموش"} · دریافت‌شده: {g["messages"]}']
+        lines = [(f'👁 <b>{escape(g["title"])}</b>\nشناسه: <code>{gid}</code>\n'
+                  f'ثبت پیام: {"روشن" if g["enabled"] else "خاموش"} · دریافت‌شده: {g["messages"]}')]
         rows = []
         messages = store.group_messages(gid, offset)
         for m in messages:
@@ -452,6 +464,13 @@ async def admin_input(message: Message, state: FSMContext, bot):
             if not text or len(text)>3000:
                 raise ValueError('متن باید بین ۱ تا ۳۰۰۰ نویسه باشد.')
             store.set_setting(mode, text)
+        elif mode == 'group_date_keywords':
+            keywords = [' '.join(item.split()) for item in text.replace('،', ',').split(',')]
+            keywords = [item for item in keywords if item]
+            joined = ','.join(keywords)
+            if not keywords or len(joined) > 200:
+                raise ValueError('حداقل یک کلمه کلیدی و حداکثر ۲۰۰ نویسه.')
+            store.set_setting(mode, joined)
         elif mode == 'birthday_hint':
             if not text or len(text) > 500:
                 raise ValueError('متن باید بین ۱ تا ۵۰۰ نویسه باشد.')

@@ -9,8 +9,7 @@ import jdatetime
 import calendar_utils as cal
 import runtime_jobs
 import store
-from tests.support import (AsyncBotTestCase, FakeBot, api_error, bad_request,
-                           forbidden, retry_after, run_until, user)
+from tests.support import AsyncBotTestCase, FakeBot, api_error, bad_request, forbidden, retry_after, run_until, user
 
 
 class CopyOneTestCase(AsyncBotTestCase):
@@ -52,7 +51,7 @@ class CopyOneTestCase(AsyncBotTestCase):
                 self.copied.append(args)
 
         with patch('runtime_jobs.asyncio.sleep', new=AsyncMock()):
-            ok, error = await runtime_jobs.copy_one(Bot(), 7, 1, 2)
+            ok, _ = await runtime_jobs.copy_one(Bot(), 7, 1, 2)
         self.assertTrue(ok)
         self.assertEqual(calls['n'], 2)
 
@@ -134,6 +133,19 @@ class DeliveryWorkerTestCase(AsyncBotTestCase):
         await run_until(lambda: store.job(jid)['status'] == 'cancelled',
                         lambda: runtime_jobs.delivery_worker(self.bot))
         self.assertEqual(self.bot.copied, [])
+
+    async def test_requeued_failed_delivery_is_sent_again(self):
+        jid = store.create_draft(1001, 1001, 5, 7)
+        store.enqueue(jid, 1001)
+        with store.connection() as c:
+            c.execute("UPDATE bot_deliveries SET status='failed' WHERE job_id=?", (jid,))
+            c.execute("UPDATE bot_jobs SET status='done' WHERE id=?", (jid,))
+        self.assertEqual(store.requeue_failed(jid, 1001), 1)
+        await run_until(lambda: store.job(jid)['status'] == 'done',
+                        lambda: runtime_jobs.delivery_worker(self.bot))
+        counts = store.job_counts(jid)
+        self.assertEqual((counts['sent'], counts['failed'], counts['pending']), (1, 0, 0))
+        self.assertEqual(self.bot.copied[-1], (7, 1001, 5))
 
     async def test_cancelled_job_sends_nothing(self):
         jid = store.create_draft(1001, 1001, 5, None)
@@ -243,9 +255,8 @@ class SupervisorTestCase(AsyncBotTestCase):
             raise RuntimeError('boom')
 
         with patch('runtime_jobs.asyncio.sleep', new=AsyncMock()), \
-                patch('runtime_jobs.log'):
-            with self.assertRaises(asyncio.CancelledError):
-                await runtime_jobs.supervised(flaky, self.bot)
+                patch('runtime_jobs.log'), self.assertRaises(asyncio.CancelledError):
+            await runtime_jobs.supervised(flaky, self.bot)
         self.assertEqual(calls['n'], 2)
         self.assertTrue(any('RuntimeError' in e['detail'] for e in store.recent_errors()))
 

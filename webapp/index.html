@@ -60,6 +60,10 @@
     .friend-date, .friend-reminder { color: var(--muted); font-size: .82rem; }
     .friend-days { color: var(--accent-dark); font-weight: 750; font-size: .85rem; }
     .delete-friend { flex: 0 0 40px; width: 40px; height: 40px; border: 1px solid #6a343c; background: #241518; color: #ff9ba6; }
+    .friend-actions { display: flex; gap: 8px; }
+    .toggle-friend { display: grid; place-items: center; flex: 0 0 40px; width: 40px; height: 40px; border: 1px solid #7658d688; border-radius: 999px; background: #211a31; color: var(--accent-dark); transition: transform .18s ease; }
+    .toggle-friend:active { transform: scale(.97); }
+    .toggle-friend[data-notification="0"] { border-color: #3a4144; background: #14181a; color: var(--muted); }
     .empty-state { padding: 15px 10px; color: var(--muted); text-align: center; }
     .friend-form { margin-top: 13px; padding: 14px; border: 1px solid #353044; border-radius: 18px; background: #0c0e11; }
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -119,6 +123,19 @@
         <div><strong><svg class="visual-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14v9H5zM3 12h18M12 12v9M12 12c-4 0-5-2-5-4 3 0 5 1 5 4zm0 0c0-3 2-5 5-5 0 3-2 5-5 5z"/></svg> تولد من</strong><span id="my-birthday">در حال بارگذاری…</span></div>
         <div class="countdown" id="my-countdown"></div>
       </div>
+      <button class="secondary" id="edit-birthday-button" type="button" style="margin-top: 12px">✏️ ویرایش تاریخ تولدم</button>
+      <form class="friend-form" id="birthday-form" hidden>
+        <div class="form-grid">
+          <div><label for="my-month">ماه تولد</label><select id="my-month" name="month" required></select></div>
+          <div><label for="my-day">روز تولد</label><select id="my-day" name="day" required></select></div>
+        </div>
+        <label class="check-row"><input id="my-notification" type="checkbox" checked> روز تولدم یادآوری بشه</label>
+        <div class="form-actions">
+          <button class="primary" type="submit">ذخیره تولد</button>
+          <button class="secondary" id="cancel-birthday" type="button">بی‌خیال</button>
+        </div>
+        <div class="status" id="birthday-status" aria-live="polite"></div>
+      </form>
       <div class="status" id="api-status" aria-live="polite"></div>
     </section>
 
@@ -275,11 +292,13 @@
       }
 
       function renderBirthday(birthday) {
+        const editButton = document.getElementById('edit-birthday-button');
         if (!birthday) {
           birthdayText.textContent = 'تولدت هنوز توی بات ثبت نشده.';
           countdownText.textContent = '';
           document.getElementById('home-birthday').textContent = 'تولدت هنوز ثبت نشده.';
           document.getElementById('home-countdown').textContent = '';
+          editButton.textContent = '🎂 ثبت تاریخ تولدم';
           return;
         }
         birthdayText.textContent = `${numberFa.format(birthday.day)} ${months[birthday.month - 1]}`;
@@ -288,6 +307,13 @@
         else countdownText.textContent = `${numberFa.format(birthday.days_remaining)} روز مونده`;
         const homeCountdown = document.getElementById('home-countdown');
         homeCountdown.replaceChildren(...Array.from(countdownText.childNodes, node => node.cloneNode(true)));
+        editButton.textContent = '✏️ ویرایش تاریخ تولدم';
+        const monthSelect = document.getElementById('my-month');
+        const daySelect = document.getElementById('my-day');
+        monthSelect.value = String(birthday.month);
+        updateMyDays();
+        daySelect.value = String(birthday.day);
+        document.getElementById('my-notification').checked = birthday.notification !== false;
       }
 
       function renderFriends(friends) {
@@ -318,13 +344,23 @@
           reminder.className = 'friend-reminder';
           setIconLabel(reminder, friend.notification ? 'bell' : 'bellOff', friend.notification ? 'یادآوری روشنه' : 'یادآوری خاموشه');
           info.append(name, date, days, reminder);
+          const actions = document.createElement('div');
+          actions.className = 'friend-actions';
+          const toggle = document.createElement('button');
+          toggle.className = 'toggle-friend';
+          toggle.type = 'button';
+          toggle.dataset.toggleFriend = String(friend.id);
+          toggle.dataset.notification = friend.notification ? '1' : '0';
+          toggle.append(createIcon(friend.notification ? 'bell' : 'bellOff'));
+          toggle.setAttribute('aria-label', `${friend.notification ? 'خاموش کردن' : 'روشن کردن'} یادآوری تولد ${friend.name}`);
           const remove = document.createElement('button');
           remove.className = 'delete-friend';
           remove.type = 'button';
           remove.dataset.deleteFriend = String(friend.id);
           remove.setAttribute('aria-label', `حذف تولد ${friend.name}`);
           remove.textContent = '×';
-          item.append(info, remove);
+          actions.append(toggle, remove);
+          item.append(info, actions);
           friendsList.append(item);
         }
       }
@@ -437,27 +473,75 @@
 
       const monthSelect = document.getElementById('friend-month');
       const daySelect = document.getElementById('friend-day');
-      months.forEach((month, index) => {
-        const option = document.createElement('option');
-        option.value = String(index + 1);
-        option.textContent = month;
-        monthSelect.append(option);
-      });
-      function updateDays() {
-        const month = Number(monthSelect.value || 1);
-        const maxDay = month <= 6 ? 31 : 30;
-        const previous = Number(daySelect.value || 1);
-        daySelect.replaceChildren();
-        for (let day = 1; day <= maxDay; day++) {
+      function fillMonths(select) {
+        months.forEach((month, index) => {
           const option = document.createElement('option');
-          option.value = String(day);
-          option.textContent = numberFa.format(day);
-          daySelect.append(option);
-        }
-        daySelect.value = String(Math.min(previous, maxDay));
+          option.value = String(index + 1);
+          option.textContent = month;
+          select.append(option);
+        });
       }
-      monthSelect.addEventListener('change', updateDays);
-      updateDays();
+      function bindDayOptions(monthSelect, daySelect) {
+        function updateDays() {
+          const month = Number(monthSelect.value || 1);
+          const maxDay = month <= 6 ? 31 : 30;
+          const previous = Number(daySelect.value || 1);
+          daySelect.replaceChildren();
+          for (let day = 1; day <= maxDay; day++) {
+            const option = document.createElement('option');
+            option.value = String(day);
+            option.textContent = numberFa.format(day);
+            daySelect.append(option);
+          }
+          daySelect.value = String(Math.min(previous, maxDay));
+        }
+        monthSelect.addEventListener('change', updateDays);
+        updateDays();
+        return updateDays;
+      }
+      fillMonths(monthSelect);
+      const updateDays = bindDayOptions(monthSelect, daySelect);
+      fillMonths(document.getElementById('my-month'));
+      const updateMyDays = bindDayOptions(document.getElementById('my-month'), document.getElementById('my-day'));
+
+      const birthdayForm = document.getElementById('birthday-form');
+      const birthdayStatus = document.getElementById('birthday-status');
+      document.getElementById('edit-birthday-button').addEventListener('click', () => {
+        birthdayForm.hidden = !birthdayForm.hidden;
+        birthdayStatus.textContent = '';
+        birthdayStatus.classList.remove('error');
+      });
+      document.getElementById('cancel-birthday').addEventListener('click', () => {
+        birthdayForm.hidden = true;
+        birthdayStatus.textContent = '';
+        birthdayStatus.classList.remove('error');
+      });
+      birthdayForm.addEventListener('submit', async event => {
+        event.preventDefault();
+        const submit = birthdayForm.querySelector('[type="submit"]');
+        submit.disabled = true;
+        birthdayStatus.textContent = 'دارم ذخیره‌اش می‌کنم…';
+        birthdayStatus.classList.remove('error');
+        try {
+          const data = await apiRequest('/api/birthday', {
+            method: 'POST',
+            body: JSON.stringify({
+              month: Number(document.getElementById('my-month').value),
+              day: Number(document.getElementById('my-day').value),
+              notification: document.getElementById('my-notification').checked
+            })
+          });
+          renderBirthday(data.birthday);
+          setStatus('');
+          birthdayForm.hidden = true;
+          birthdayStatus.textContent = '';
+        } catch (error) {
+          birthdayStatus.textContent = error.message;
+          birthdayStatus.classList.add('error');
+        } finally {
+          submit.disabled = false;
+        }
+      });
 
       document.getElementById('add-friend-button').addEventListener('click', () => {
         form.hidden = !form.hidden;
@@ -498,6 +582,21 @@
         }
       });
       friendsList.addEventListener('click', async event => {
+        const toggle = event.target.closest('[data-toggle-friend]');
+        if (toggle) {
+          toggle.disabled = true;
+          try {
+            await apiRequest('/api/friends/' + encodeURIComponent(toggle.dataset.toggleFriend), {
+              method: 'PATCH',
+              body: JSON.stringify({ notification: toggle.dataset.notification !== '1' })
+            });
+            await loadDashboard();
+          } catch (error) {
+            setStatus(error.message, true);
+            toggle.disabled = false;
+          }
+          return;
+        }
         const remove = event.target.closest('[data-delete-friend]');
         if (!remove) return;
         const accepted = app && app.showConfirm
