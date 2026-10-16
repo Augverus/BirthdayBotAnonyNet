@@ -13,11 +13,23 @@ cp .env.example .env
 
 در `.env` مقدار `BOT_TOKEN` و آیدی عددی مالک در `ADMIN_IDS` را قرار دهید. دستور `/id` شناسه خودتان را نمایش می‌دهد. توکن را منتشر نکنید. اگر وب‌هوک فعالی وجود داشته باشد، برنامه با توضیح متوقف می‌شود و آن را خودکار حذف نمی‌کند.
 
-## اتصال مینی‌اپ به اطلاعات بات
+## انتشار مینی‌اپ روی Cloudflare Pages
 
-مینی‌اپ از GitHub Pages باز می‌شود؛ برای خواندن تولد کاربر و فهرست عزیزان، خود بات هم API امنی روی پورت `8080` اجرا می‌کند. آدرس عمومی API باید روی VPS با HTTPS و یک reverse proxy به `127.0.0.1:8080` وصل شود. به طور پیش‌فرض API فقط روی `127.0.0.1` گوش می‌دهد.
+این مینی‌اپ یک سایت استاتیک است و به API یا دیتابیس عمومی نیاز ندارد. در Cloudflare Pages مخزن را متصل و این مقادیر را تنظیم کنید:
 
-بعد از راه‌اندازی VPS، در `webapp/api-config.js` مقدار `window.BOT_API_URL` را به مبدأ HTTPS عمومی API تغییر دهید (برای نمونه `https://api.example.com`). مبدأ مینی‌اپ از `WEBAPP_URL` مجاز می‌شود؛ در صورت نیاز می‌توانید مبدأهای دیگر را با `WEBAPP_API_ALLOWED_ORIGINS` و کاما جدا کنید. توکن بات را در فایل‌های `webapp` قرار ندهید. API اطلاعات ورود Mini App را با توکن سمت سرور بررسی می‌کند و فقط تولدهای متعلق به همان کاربر را می‌خواند یا تغییر می‌دهد.
+- Root directory: `webapp`
+- Build command: خالی (بدون build)
+- Build output directory: `.`
+
+بعد از انتشار، آدرس HTTPS که Cloudflare نشان می‌دهد را در `.env` کنار `main.py` قرار دهید:
+
+```dotenv
+WEBAPP_URL=https://your-project.pages.dev/
+```
+
+بات را دوباره اجرا کنید. کاربر از دکمهٔ «تبدیل تاریخ» وارد مینی‌اپ می‌شود. برای ثبت تولد، مینی‌اپ از دکمهٔ وب‌اپ کیبورد تلگرام `sendData` استفاده می‌کند؛ بات داده را اعتبارسنجی می‌کند و فقط ماه و روز شمسی را نگه می‌دارد. سال فقط در مرورگر باقی می‌ماند/برای اعتبارسنجی فرستاده می‌شود. محتوای `webapp` استاتیک است؛ `.env`، توکن، دیتابیس SQLite و اطلاعات تولد را در آن قرار ندهید.
+
+دکمهٔ «امروز» و شمارش روزها بر اساس `Asia/Tehran` است تا با `TIMEZONE` پیش‌فرض بات هماهنگ باشد. اگر `TIMEZONE` را در `.env` تغییر می‌دهید، شناسهٔ منطقهٔ زمانی را هم در `webapp/calendar.js` در تابع `todaySerial()` هماهنگ کنید.
 
 ## امکانات کاربران
 
@@ -97,23 +109,6 @@ WantedBy=multi-user.target
 sudo systemctl daemon-reload
 sudo systemctl enable --now birthday-bot
 journalctl -u birthday-bot -f
-```
-
-نمونه reverse proxy با nginx برای API مینی‌اپ (وقتی API روی `127.0.0.1:8080` گوش می‌دهد):
-
-```nginx
-server {
-    listen 443 ssl;
-    server_name api.example.com;
-    ssl_certificate     /etc/letsencrypt/live/api.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/api.example.com/privkey.pem;
-
-    location / {
-        proxy_pass http://127.0.0.1:8080;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    }
-}
 ```
 
 برای پاک‌سازی کامل داده‌ها از تاریخچه گیت (چون قبلاً commit شده‌اند) به `git filter-repo` و سپس force-push نیاز است؛ قبل از آن با همه همکاران هماهنگ کنید.

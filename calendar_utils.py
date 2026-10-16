@@ -20,12 +20,14 @@ def today():
 def days_in_month(month):
     if not 1 <= month <= 12:
         raise ValueError('Invalid month')
-    return 31 if month <= 6 else 30 if month < 12 or today().isleap() else 29
+    # Yearless birthday entry must allow Esfand 30 even when this year is not leap.
+    return 31 if month <= 6 else 30
 
 
 def valid_birthday(month, day):
     # Annual Esfand 30 birthdays are observed on Esfand 29 in non-leap years.
-    return 1 <= month <= 12 and 1 <= day <= (31 if month <= 6 else 30)
+    return (type(month) is int and type(day) is int and 1 <= month <= 12
+            and 1 <= day <= (31 if month <= 6 else 30))
 
 
 def occurrence(year, month, day):

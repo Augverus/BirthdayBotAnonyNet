@@ -41,11 +41,8 @@ class CalendarTestCase(unittest.TestCase):
         with self.assertRaises(ValueError):
             cal.days_in_month(0)
 
-    def test_days_in_month_esfand_follows_current_year(self):
-        with patch.object(cal, 'local_now', return_value=datetime(2024, 6, 1)):
-            self.assertEqual(cal.days_in_month(12), 30)  # 1403 is a leap year
-        with patch.object(cal, 'local_now', return_value=datetime(2023, 6, 1)):
-            self.assertEqual(cal.days_in_month(12), 29)  # 1402 is not
+    def test_yearless_birthday_months_always_allow_esfand_30(self):
+        self.assertEqual(cal.days_in_month(12), 30)
 
     def test_occurrence_moves_esfand_30_to_29_when_target_year_is_not_leap(self):
         self.assertEqual(

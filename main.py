@@ -12,6 +12,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import SimpleEventIsolation
 from aiogram.types import CallbackQuery, ErrorEvent, Message
+import jdatetime
 
 import admin_panel
 import calendar_utils as cal
@@ -19,7 +20,6 @@ import config
 import runtime_jobs
 import store
 import ui
-import webapp_api
 
 log = logging.getLogger(__name__)
 dp = Dispatcher(events_isolation=SimpleEventIsolation())
@@ -265,6 +265,48 @@ async def date_converter_entry(message: Message):
 @user_router.callback_query(F.data == 'date:setup')
 async def date_converter_setup(callback: CallbackQuery):
     await callback.answer('ابتدا WEBAPP_URL را در فایل .env تنظیم کن.', show_alert=True)
+
+
+@user_router.message(F.web_app_data)
+async def mini_app_data_handler(message: Message, bot):
+    """Accept only a validated birthday payload from Telegram's Mini App message."""
+    raw = message.web_app_data.data if message.web_app_data else None
+    try:
+        payload_size = len(raw.encode('utf-8')) if isinstance(raw, str) else 4097
+    except UnicodeEncodeError:
+        payload_size = 4097
+    if (message.chat.type != 'private' or not message.from_user
+            or message.from_user.is_bot or not isinstance(raw, str)
+            or message.web_app_data.button_text != ui.DATE_CONVERTER_WEBAPP_BUTTON
+            or payload_size > 4096):
+        await message.answer('اطلاعات ارسالی معتبر نیست.')
+        return
+    try:
+        payload = json.loads(raw, object_pairs_hook=_unique_json_object)
+        if (not isinstance(payload, dict)
+                or set(payload) != {'action', 'calendar', 'year', 'month', 'day'}
+                or payload['action'] != 'save_birthday'
+                or payload['calendar'] != 'solar_hijri'
+                or any(type(payload[key]) is not int for key in ('year', 'month', 'day'))):
+            raise ValueError
+        year, month, day = payload['year'], payload['month'], payload['day']
+        birthday = jdatetime.date(year, month, day)
+        if birthday > cal.today() or not cal.valid_birthday(month, day):
+            raise ValueError
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError, RecursionError):
+        await message.answer('تاریخ ارسالی معتبر نیست؛ تاریخ را دوباره بررسی کن.')
+        return
+    # The entered year is validated but is not persisted; annual reminders use month/day.
+    await save_birthday(message, message.from_user.id, month, day, bot, notification=None)
+
+
+def _unique_json_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError('duplicate JSON key')
+        result[key] = value
+    return result
 
 
 FRIENDS_PAGE_SIZE = 5
@@ -514,8 +556,11 @@ async def month_handler(callback: CallbackQuery):
     await callback.message.edit_text(f'🌸 {cal.MONTHS[month-1]}\nحالا روز تولدت رو انتخاب کن 🎈', reply_markup=keyboard)
 
 
-async def save_birthday(message, uid, month, day, bot):
-    store.update_user(uid, month=month, day=day, notification=1)
+async def save_birthday(message, uid, month, day, bot, notification=1):
+    changes = {'month': month, 'day': day}
+    if notification is not None:
+        changes['notification'] = notification
+    store.update_user(uid, **changes)
     days = cal.remaining(month, day)
     text = f'{ui.emoji("on", "✅")} <b>تولدت ثبت شد!</b>\n\n{ui.emoji("birthday", "🎂")} {cal.birthday_text(month, day)}\n'
     text += f'{ui.emoji("birthday", "🎂")} امروز روز توئه؛ تولدت مبارک!' if days==0 else f'{ui.emoji("until", "⏳")} <b>{days} روز</b> تا جشن تولدت!'
@@ -646,32 +691,22 @@ async def _run_bot():
             except TelegramAPIError:
                 store.set_setting('custom_emoji', '0')
                 log.warning('Custom emoji lookup unavailable; using text without icons')
+        tasks = [asyncio.create_task(runtime_jobs.supervised(worker, bot))
+                 for worker in (runtime_jobs.delivery_worker, runtime_jobs.reminder_worker,
+                                runtime_jobs.backup_worker)]
         try:
-            api_runner = await webapp_api.start()
-            log.info('Mini App API listening on %s:%s', config.WEBAPP_API_HOST, config.WEBAPP_API_PORT)
-        except OSError:
-            api_runner = None
-            log.exception('Mini App API could not start; Telegram bot will continue without Mini App data')
-        try:
-            tasks = [asyncio.create_task(runtime_jobs.supervised(worker, bot))
-                     for worker in (runtime_jobs.delivery_worker, runtime_jobs.reminder_worker,
-                                    runtime_jobs.backup_worker)]
-            try:
-                await dp.start_polling(
-                    bot,
-                    allowed_updates=dp.resolve_used_update_types(),
-                    close_bot_session=False,
-                    tasks_concurrency_limit=config.UPDATE_CONCURRENCY,
-                )
-            finally:
-                for task in tasks:
-                    task.cancel()
-                for task in tasks:
-                    with suppress(asyncio.CancelledError):
-                        await task
+            await dp.start_polling(
+                bot,
+                allowed_updates=dp.resolve_used_update_types(),
+                close_bot_session=False,
+                tasks_concurrency_limit=config.UPDATE_CONCURRENCY,
+            )
         finally:
-            if api_runner:
-                await api_runner.cleanup()
+            for task in tasks:
+                task.cancel()
+            for task in tasks:
+                with suppress(asyncio.CancelledError):
+                    await task
 
 
 async def main():

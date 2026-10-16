@@ -24,6 +24,7 @@ BTN_ADMIN = '🛠 پنل مدیریت'
 
 BTN_FRIENDS = '👥 تولد عزیزان'
 BTN_DATE_CONVERTER = '🗓 تبدیل تاریخ'
+DATE_CONVERTER_WEBAPP_BUTTON = '🚀 باز کردن مبدل تاریخ'
 
 ORDINARY_EMOJI = re.compile(
     r'[\U0001F000-\U0001FAFF\u2600-\u27BF\u2300-\u23FF\u2B00-\u2BFF]'
@@ -82,8 +83,12 @@ def inline(rows):
 
 def date_converter_keyboard():
     if config.WEBAPP_URL:
-        return inline([[button('🚀 باز کردن مبدل تاریخ', style='primary',
-                               web_app=WebAppInfo(url=config.WEBAPP_URL))]])
+        return ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text=DATE_CONVERTER_WEBAPP_BUTTON,
+                                      web_app=WebAppInfo(url=config.WEBAPP_URL))]],
+            resize_keyboard=True,
+            one_time_keyboard=True,
+        )
     return inline([[button('⚙️ راهنمای فعال‌سازی', 'date:setup', 'primary')]])
 
 

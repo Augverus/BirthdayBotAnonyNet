@@ -315,8 +315,10 @@ class UserFlowTestCase(AsyncBotTestCase):
             message = self.msg(ui.BTN_DATE_CONVERTER)
             await main.date_converter_entry(message)
             self.assertNotIn('WEBAPP_URL', message.last_answer)
-            button = message.answers[-1]['reply_markup'].inline_keyboard[0][0]
+            keyboard = message.answers[-1]['reply_markup']
+            button = keyboard.keyboard[0][0]
             self.assertEqual(button.web_app.url, 'https://example.com/app')
+            self.assertTrue(keyboard.is_persistent is None or not keyboard.is_persistent)
         finally:
             config.WEBAPP_URL = saved
 
@@ -324,6 +326,51 @@ class UserFlowTestCase(AsyncBotTestCase):
         callback = self.cb('date:setup')
         await main.date_converter_setup(callback)
         self.assertTrue(callback.answers[-1]['show_alert'])
+
+    async def test_mini_app_saves_sender_month_day_and_preserves_notification_choice(self):
+        store.update_user(7, month=1, day=1, notification=0)
+        message = self.msg(None)
+        message.web_app_data = SimpleNamespace(data='{"action":"save_birthday","calendar":"solar_hijri","year":1403,"month":12,"day":30}', button_text=ui.DATE_CONVERTER_WEBAPP_BUTTON)
+        await main.mini_app_data_handler(message, self.bot)
+        saved = store.user(7)
+        self.assertEqual((saved['month'], saved['day'], saved['notification']), (12, 30, 0))
+
+    async def test_mini_app_rejects_forged_or_malformed_payloads(self):
+        invalid = [
+            '{"action":"save_birthday","calendar":"solar_hijri","year":1403,"month":12,"day":30,"user_id":999}',
+            '{"action":"save_birthday","calendar":"solar_hijri","year":1403,"month":12,"day":30,"day":1}',
+            '{"action":"save_birthday","calendar":"solar_hijri","year":1403,"month":12,"day":31}',
+            '{"action":"save_birthday","calendar":"solar_hijri","year":1403,"month":12}',
+        ]
+        for raw in invalid:
+            with self.subTest(payload=raw):
+                message = self.msg(None)
+                message.web_app_data = SimpleNamespace(data=raw, button_text=ui.DATE_CONVERTER_WEBAPP_BUTTON)
+                await main.mini_app_data_handler(message, self.bot)
+                self.assertEqual((store.user(7)['month'], store.user(7)['day']), (None, None))
+
+    async def test_mini_app_rejects_future_date_and_non_private_message(self):
+        message = self.msg(None)
+        message.web_app_data = SimpleNamespace(data='{"action":"save_birthday","calendar":"solar_hijri","year":9999,"month":1,"day":1}', button_text=ui.DATE_CONVERTER_WEBAPP_BUTTON)
+        await main.mini_app_data_handler(message, self.bot)
+        self.assertIsNone(store.user(7)['month'])
+        message = self.msg(None)
+        message.web_app_data = SimpleNamespace(
+            data='{"action":"save_birthday","calendar":"solar_hijri","year":1403,"month":1,"day":1}',
+            button_text='A different Web App',
+        )
+        await main.mini_app_data_handler(message, self.bot)
+        self.assertIsNone(store.user(7)['month'])
+        message.web_app_data = SimpleNamespace(
+            data=' ' * 4097, button_text=ui.DATE_CONVERTER_WEBAPP_BUTTON,
+        )
+        await main.mini_app_data_handler(message, self.bot)
+        self.assertIsNone(store.user(7)['month'])
+        message = self.msg(None)
+        message.chat.type = 'group'
+        message.web_app_data = SimpleNamespace(data='{"action":"save_birthday","calendar":"solar_hijri","year":1403,"month":1,"day":1}', button_text=ui.DATE_CONVERTER_WEBAPP_BUTTON)
+        await main.mini_app_data_handler(message, self.bot)
+        self.assertIsNone(store.user(7)['month'])
 
     # --- home keyboard -----------------------------------------------------
     async def test_home_keyboard_tracks_registration(self):
