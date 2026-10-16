@@ -1,6 +1,6 @@
 """Telegram keyboard styles and optional custom emoji with a server-error fallback."""
-import re
 import json
+import re
 from html import escape
 
 from aiogram.client.session.middlewares.base import BaseRequestMiddleware
@@ -89,7 +89,9 @@ def date_converter_keyboard():
 
 def home(uid):
     u = store.user(uid)
-    b = lambda text, style, key=None: KeyboardButton(text=text, style=style, icon_custom_emoji_id=icon(key))
+
+    def b(text, style, key=None):
+        return KeyboardButton(text=text, style=style, icon_custom_emoji_id=icon(key))
     if u and u['month']:
         rows = [[b(BTN_EDIT, 'primary', 'edit')],
                 [b(BTN_OFF if u['notification'] else BTN_ON, 'danger' if u['notification'] else 'success', 'off' if u['notification'] else 'on')],

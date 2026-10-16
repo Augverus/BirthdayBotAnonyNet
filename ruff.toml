@@ -1,0 +1,14 @@
+# Ruff configuration for the bot runtime and its offline test suite.
+# The bot supports Python 3.10+ (aiogram's floor), so pyupgrade fixes that
+# need a newer interpreter (e.g. datetime.UTC) stay disabled on purpose.
+line-length = 120
+target-version = "py310"
+
+[lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "C4", "SIM", "RUF", "ISC"]
+# Persian strings legitimately mix Arabic-script characters and emoji.
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[lint.per-file-ignores]
+# Tests exercise the compiled regexes and locale formatting directly.
+"tests/*" = ["E501"]

@@ -1,11 +1,12 @@
 # اطلاعات حساس — هرگز commit نشه
 .env
 
-# دیتابیس
+# دیتابیس و داده‌های کاربران (هرگز commit نشوند؛ مخزن عمومی است)
 *.db
 *.db-wal
 *.db-shm
 *.log
+birthdays.json
 backups/
 
 # پایتون
@@ -13,6 +14,10 @@ __pycache__/
 *.pyc
 venv/
 .venv/
+
+# ابزارها
+.ruff_cache/
+.pytest_cache/
 
 # سیستم‌عامل
 .DS_Store

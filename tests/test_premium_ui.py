@@ -1,6 +1,7 @@
-from aiogram.methods import SendMessage, AnswerCallbackQuery, SendDocument
-from aiogram.types import MessageEntity
 from unittest.mock import patch
+
+from aiogram.methods import AnswerCallbackQuery, SendDocument, SendMessage
+from aiogram.types import MessageEntity
 
 import store
 import ui

@@ -1,5 +1,6 @@
 """Persistent runtime tables; legacy tables and JSON data are preserved."""
 import json
+import logging
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -7,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import config
+
+log = logging.getLogger(__name__)
 
 _connections = threading.local()
 
@@ -60,6 +63,7 @@ def close_connection():
 
 
 def init():
+    _guard_missing_database()
     with connection() as c:
         c.execute('PRAGMA journal_mode=WAL')
         c.executescript('''
@@ -112,20 +116,71 @@ def init():
             WHERE status='pending';
         ''')
         if not c.execute("SELECT 1 FROM settings WHERE key='runtime_migrated'").fetchone():
-            legacy = Path(config.BASE_DIR) / 'birthdays.json'
-            rows = json.loads(legacy.read_text()) if legacy.exists() else {}
-            for uid, row in rows.items():
-                c.execute('''INSERT OR IGNORE INTO bot_users
-                    (id,name,username,month,day,notification) VALUES(?,?,?,?,?,?)''',
-                    (int(uid), row.get('full_name', ''), row.get('username'),
-                     row['month'], row['day'], int(row.get('notification', True))))
-            exists = c.execute("SELECT 1 FROM sqlite_master WHERE name='users'").fetchone()
-            if exists:
-                for row in c.execute('SELECT * FROM users').fetchall():
-                    c.execute('''INSERT OR IGNORE INTO bot_users(id,name,month,day)
-                        VALUES(?,?,?,?)''', (row['chat_id'], row['name'] or '', row['birth_month'], row['birth_day']))
+            _import_legacy_users(c)
             c.execute("INSERT INTO settings(key,value) VALUES('runtime_migrated','1')")
         c.execute("INSERT OR IGNORE INTO settings(key,value) VALUES('custom_emoji','1')")
+
+
+def _valid_legacy_birthday(month, day):
+    try:
+        month, day = int(month), int(day)
+    except (TypeError, ValueError):
+        return False
+    return 1 <= month <= 12 and 1 <= day <= 31
+
+
+def _guard_missing_database():
+    """Never silently start with an empty DB when backups prove data existed.
+
+    ``birthdays.db`` is no longer tracked by git, so a pull on a machine that
+    still tracked it removes the file. Refusing to start beats overwriting the
+    live data with an empty schema.
+    """
+    if str(config.DB_PATH) == ':memory:':
+        return
+    path = Path(config.DB_PATH)
+    if path.exists():
+        return
+    backups = sorted((Path(config.BASE_DIR) / 'backups' / 'automatic').glob('birthdays-*.db'))
+    if backups:
+        raise RuntimeError(
+            f'database file {path} is missing while automatic backups exist '
+            f'(newest: {backups[-1]}). Copy a backup to the configured DB_PATH '
+            'before starting, so no data is lost.')
+
+
+def _import_legacy_users(c):
+    """Best-effort import of legacy data; broken rows are skipped, never fatal."""
+    legacy = Path(config.BASE_DIR) / 'birthdays.json'
+    if legacy.exists():
+        try:
+            rows = json.loads(legacy.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            rows = None
+            log.warning('legacy birthdays.json is unreadable; skipping JSON import')
+        if not isinstance(rows, dict):
+            rows = {}
+        for uid, row in rows.items():
+            try:
+                if not _valid_legacy_birthday(row['month'], row['day']):
+                    continue
+                c.execute('''INSERT OR IGNORE INTO bot_users
+                    (id,name,username,month,day,notification) VALUES(?,?,?,?,?,?)''',
+                    (int(uid), str(row.get('full_name', ''))[:200], row.get('username'),
+                     int(row['month']), int(row['day']), int(bool(row.get('notification', True)))))
+            except (AttributeError, KeyError, TypeError, ValueError):
+                log.warning('skipping malformed legacy JSON row for %r', uid)
+    exists = c.execute("SELECT 1 FROM sqlite_master WHERE name='users'").fetchone()
+    if exists:
+        for row in c.execute('SELECT * FROM users').fetchall():
+            try:
+                if not _valid_legacy_birthday(row['birth_month'], row['birth_day']):
+                    continue
+                c.execute('''INSERT OR IGNORE INTO bot_users(id,name,month,day)
+                    VALUES(?,?,?,?)''', (int(row['chat_id']), row['name'] or '',
+                                         int(row['birth_month']), int(row['birth_day'])))
+            except (KeyError, TypeError, ValueError):
+                log.warning('skipping malformed legacy users row')
 
 
 def setting(key, default=''):
@@ -215,6 +270,16 @@ def prune_reminders(before_day):
         c.execute('DELETE FROM bot_friend_reminders WHERE day < ?', (before_day,))
 
 
+def users_to_remind(day):
+    """Users due a countdown note today that have not received one yet."""
+    with connection() as c:
+        return [dict(r) for r in c.execute('''SELECT u.* FROM bot_users u
+            LEFT JOIN bot_reminders r ON r.user_id=u.id AND r.day=?
+            WHERE u.month IS NOT NULL AND u.notification=1
+              AND u.blocked=0 AND u.banned=0 AND r.user_id IS NULL
+            ORDER BY u.id''', (day,))]
+
+
 def add_friend_birthday(owner_id, name, month, day, notification=True):
     name = ' '.join(str(name).split())
     if not name or len(name) > 80 or not 1 <= month <= 12 or not 1 <= day <= 31:
@@ -248,6 +313,34 @@ def friend_birthdays_on(month, day):
             FROM bot_friend_birthdays f LEFT JOIN bot_users u ON u.id=f.owner_id
             WHERE f.month=? AND f.day=? AND f.notification=1
             ORDER BY f.owner_id,f.name COLLATE NOCASE''', (month, day))]
+
+
+def friend_birthday(owner_id, friend_id):
+    with connection() as c:
+        row = c.execute('''SELECT id,name,month,day,notification FROM bot_friend_birthdays
+            WHERE owner_id=? AND id=?''', (owner_id, friend_id)).fetchone()
+        return dict(row) if row else None
+
+
+def set_friend_notification(owner_id, friend_id, enabled):
+    """Return True when the friend exists and its reminder flag was stored."""
+    with connection() as c:
+        result = c.execute('UPDATE bot_friend_birthdays SET notification=? WHERE owner_id=? AND id=?',
+                           (int(bool(enabled)), owner_id, friend_id))
+        return result.rowcount == 1
+
+
+def toggle_friend_notification(owner_id, friend_id):
+    """Flip the reminder flag; return the new value or None for unknown friends."""
+    with connection() as c:
+        row = c.execute('SELECT notification FROM bot_friend_birthdays WHERE owner_id=? AND id=?',
+                        (owner_id, friend_id)).fetchone()
+        if not row:
+            return None
+        value = 0 if row['notification'] else 1
+        c.execute('UPDATE bot_friend_birthdays SET notification=? WHERE owner_id=? AND id=?',
+                  (value, owner_id, friend_id))
+        return value
 
 
 def friend_reminder_sent(owner_id, day):
@@ -370,3 +463,17 @@ def job_counts(jid):
         return dict(c.execute('''SELECT COUNT(*) total,
             COALESCE(SUM(status='sent'),0) sent, COALESCE(SUM(status='failed'),0) failed,
             COALESCE(SUM(status='pending'),0) pending FROM bot_deliveries WHERE job_id=?''', (jid,)).fetchone())
+
+
+def requeue_failed(jid, admin_id):
+    """Move an admin's failed deliveries back to pending; return how many moved."""
+    with connection() as c:
+        row = c.execute('SELECT status FROM bot_jobs WHERE id=? AND admin_id=?',
+                        (jid, admin_id)).fetchone()
+        if not row:
+            return 0
+        moved = c.execute("UPDATE bot_deliveries SET status='pending',error=NULL "
+                          "WHERE job_id=? AND status='failed'", (jid,)).rowcount
+        if moved and row['status'] in ('done', 'cancelled'):
+            c.execute("UPDATE bot_jobs SET status='queued',completed_at=NULL WHERE id=?", (jid,))
+        return moved

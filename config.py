@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """خواندن تنظیمات از فایل .env — هیچ مقدار حساسی توی کد نیست."""
 
 import os
@@ -23,7 +22,19 @@ def _get_required(key: str) -> str:
 BOT_TOKEN: str = _get_required("BOT_TOKEN")
 
 # --- دیتابیس ---
-DB_PATH: str = os.getenv("DB_PATH", str(BASE_DIR / "birthdays.db"))
+
+
+def resolve_db_path(base_dir: Path, raw: str) -> str:
+    """مسیرهای نسبی همیشه داخل پوشه پروژه باز شوند، نه پوشه جاری اجرا."""
+    if raw == ":memory:":
+        return raw
+    candidate = Path(raw).expanduser()
+    if not candidate.is_absolute():
+        candidate = Path(base_dir) / candidate
+    return str(candidate)
+
+
+DB_PATH: str = resolve_db_path(BASE_DIR, os.getenv("DB_PATH", "birthdays.db"))
 
 # --- زمان ارسال یادآوری روزانه ---
 REMINDER_HOUR: int = int(os.getenv("REMINDER_HOUR", "9"))

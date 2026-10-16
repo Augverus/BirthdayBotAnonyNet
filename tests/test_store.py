@@ -4,6 +4,7 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import calendar_utils as cal
 import config
@@ -154,6 +155,36 @@ class FriendBirthdayTestCase(BotTestCase):
             self.assertEqual(c.execute('SELECT COUNT(*) FROM bot_reminders').fetchone()[0], 0)
         self.assertTrue(store.friend_reminder_sent(7, '2024-06-01'))
 
+    def test_lookup_is_scoped_to_owner(self):
+        fid = store.add_friend_birthday(7, 'Ali', 2, 3, True)
+        self.assertEqual(store.friend_birthday(7, fid)['name'], 'Ali')
+        self.assertIsNone(store.friend_birthday(8, fid))
+        self.assertIsNone(store.friend_birthday(7, 999))
+
+    def test_toggle_and_set_friend_notification(self):
+        fid = store.add_friend_birthday(7, 'Ali', 2, 3, True)
+        self.assertEqual(store.toggle_friend_notification(7, fid), 0)
+        self.assertEqual(store.toggle_friend_notification(7, fid), 1)
+        self.assertIsNone(store.toggle_friend_notification(7, 999))
+        self.assertTrue(store.set_friend_notification(7, fid, False))
+        self.assertEqual(store.friend_birthday(7, fid)['notification'], 0)
+        self.assertFalse(store.set_friend_notification(7, 999, True))
+
+    def test_users_to_remind_filters_and_marks(self):
+        store.track_user(user(7, 'Due'), 'k1', 'message')
+        store.update_user(7, month=3, day=5, notification=1)
+        store.track_user(user(8, 'Muted'), 'k2', 'message')
+        store.update_user(8, month=3, day=5, notification=0)
+        store.track_user(user(9, 'Blocked'), 'k3', 'message')
+        store.update_user(9, month=3, day=5, notification=1, blocked=1)
+        store.track_user(user(10, 'NoBirthday'), 'k4', 'message')
+        self.assertEqual([u['id'] for u in store.users_to_remind('2024-06-01')], [7])
+
+        with store.connection() as c:
+            c.execute('INSERT INTO bot_reminders VALUES(?,?)', (7, '2024-06-01'))
+        self.assertEqual(store.users_to_remind('2024-06-01'), [])
+        self.assertEqual([u['id'] for u in store.users_to_remind('2024-06-02')], [7])
+
 
 class GroupMessageTestCase(BotTestCase):
     def test_records_message_and_counts_once(self):
@@ -206,7 +237,7 @@ class GroupMessageTestCase(BotTestCase):
         self.assertEqual(len(first), 5)
         self.assertEqual(first[0]['body'], 'm12')
         self.assertEqual(second[0]['body'], 'm7')
-        self.assertFalse(set(m['message_id'] for m in first) & set(m['message_id'] for m in second))
+        self.assertFalse({m['message_id'] for m in first} & {m['message_id'] for m in second})
 
 
 class JobsTestCase(BotTestCase):
@@ -238,6 +269,28 @@ class JobsTestCase(BotTestCase):
             c.execute("UPDATE bot_deliveries SET status='sent' WHERE job_id=?", (jid,))
         counts = store.job_counts(jid)
         self.assertEqual((counts['sent'], counts['failed'], counts['pending']), (1, 0, 0))
+
+    def test_requeue_failed_is_scoped_and_restarts_job(self):
+        jid = store.create_draft(1001, 1001, 5, 7)
+        store.enqueue(jid, 1001)
+        with store.connection() as c:
+            c.execute("UPDATE bot_deliveries SET status='failed',error='BadRequest' WHERE job_id=?", (jid,))
+            c.execute("UPDATE bot_jobs SET status='done' WHERE id=?", (jid,))
+        self.assertEqual(store.requeue_failed(jid, 9999), 0)  # not the owner
+        self.assertEqual(store.requeue_failed(jid, 1001), 1)
+        self.assertEqual(store.job(jid)['status'], 'queued')
+        counts = store.job_counts(jid)
+        self.assertEqual((counts['failed'], counts['pending']), (0, 1))
+        self.assertEqual(store.requeue_failed(jid, 1001), 0)  # nothing left to retry
+
+    def test_requeue_failed_from_cancelled_job(self):
+        jid = store.create_draft(1001, 1001, 5, 7)
+        store.enqueue(jid, 1001)
+        with store.connection() as c:
+            c.execute("UPDATE bot_deliveries SET status='failed' WHERE job_id=?", (jid,))
+            c.execute("UPDATE bot_jobs SET status='cancelled' WHERE id=?", (jid,))
+        self.assertEqual(store.requeue_failed(jid, 1001), 1)
+        self.assertEqual(store.job(jid)['status'], 'queued')
 
 
 class ErrorLogTestCase(BotTestCase):
@@ -296,6 +349,58 @@ class MigrationTestCase(unittest.TestCase):
 
         store.init()  # idempotent: no duplicates, no crash
         self.assertEqual(len(store.all_users()), 2)
+
+    def test_malformed_rows_are_skipped(self):
+        (self.dir / 'birthdays.json').write_text(json.dumps({
+            '42': {'month': 4, 'day': 16, 'full_name': 'Good'},
+            'not-a-number': {'month': 4, 'day': 16, 'full_name': 'Bad id'},
+            '43': {'day': 16, 'full_name': 'Missing month'},
+            '44': {'month': 13, 'day': 1, 'full_name': 'Bad month'},
+            '45': ['not', 'a', 'dict'],
+        }))
+        with patch.object(store.log, 'warning'):
+            store.init()
+        self.assertEqual([u['id'] for u in store.all_users()], [42, 77])
+
+    def test_corrupt_json_file_never_blocks_startup(self):
+        (self.dir / 'birthdays.json').write_text('{ definitely not json')
+        with patch.object(store.log, 'warning'):
+            store.init()
+        self.assertEqual(store.user(77)['month'], 9)  # legacy table still imported
+        self.assertEqual(store.setting('runtime_migrated'), '1')
+
+
+class MissingDatabaseGuardTestCase(unittest.TestCase):
+    """Untracked DB files must never be replaced by an empty database silently."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tmp.name)
+        self._saved = (config.DB_PATH, config.BASE_DIR)
+        config.BASE_DIR = self._tmp.name
+        config.DB_PATH = str(self.dir / 'birthdays.db')
+        store.close_connection()
+
+    def tearDown(self):
+        store.close_connection()
+        config.DB_PATH, config.BASE_DIR = self._saved
+        self._tmp.cleanup()
+
+    def test_missing_database_with_backups_refuses_to_start(self):
+        backup_dir = self.dir / 'backups' / 'automatic'
+        backup_dir.mkdir(parents=True)
+        (backup_dir / 'birthdays-20260101-000000-000000.db').write_bytes(b'')
+        with self.assertRaises(RuntimeError):
+            store.init()
+
+    def test_missing_database_without_backups_starts_fresh(self):
+        store.init()
+        self.assertEqual(store.setting('custom_emoji'), '1')
+
+    def test_memory_database_skips_the_guard(self):
+        config.DB_PATH = ':memory:'
+        store.init()
+        self.assertEqual(store.setting('custom_emoji'), '1')
 
 
 if __name__ == '__main__':
