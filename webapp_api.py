@@ -108,6 +108,11 @@ async def health(_request):
     return web.json_response({"ok": True})
 
 
+async def mini_app_index(_request):
+    """Serve the Mini App from the same origin as its authenticated API."""
+    return web.FileResponse(config.BASE_DIR / "webapp" / "index.html")
+
+
 async def preflight(_request):
     return web.Response(status=204)
 
@@ -205,6 +210,10 @@ def create_app():
     app.router.add_patch("/api/friends/{friend_id}", update_friend)
     app.router.add_delete("/api/friends/{friend_id}", delete_friend)
     app.router.add_route("OPTIONS", "/{path:.*}", preflight)
+    app.router.add_get("/", mini_app_index)
+    # Only the static Mini App directory is exposed; project files, secrets,
+    # SQLite databases, and backups are outside this mounted directory.
+    app.router.add_static("/", config.BASE_DIR / "webapp", name="mini_app", show_index=False)
     return app
 
 

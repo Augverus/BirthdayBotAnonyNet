@@ -13,27 +13,109 @@ cp .env.example .env
 
 در `.env` مقدار `BOT_TOKEN` و آیدی عددی مالک در `ADMIN_IDS` را قرار دهید. دستور `/id` شناسه خودتان را نمایش می‌دهد. توکن را منتشر نکنید. اگر وب‌هوک فعالی وجود داشته باشد، برنامه با توضیح متوقف می‌شود و آن را خودکار حذف نمی‌کند.
 
-## انتشار مینی‌اپ روی Cloudflare Pages
+## انتقال بات، دیتابیس و مینی‌اپ به Linux VPS
 
-فایل‌های مینی‌اپ روی Cloudflare Pages فقط سایت استاتیک را اجرا می‌کنند. پنل پروفایل و تولدهای عزیزان برای خواندن و تغییر داده‌ها به API خود بات روی کامپیوتر/VPS نیاز دارند؛ دیتابیس و API را روی Cloudflare قرار ندهید. در Cloudflare Pages مخزن را متصل و این مقادیر را تنظیم کنید:
+بات، SQLite، API و فایل‌های مینی‌اپ همگی روی VPS می‌مانند. `webapp_api.py` همان پوشهٔ `webapp` را سرو می‌کند و API را در همان مبدأ ارائه می‌دهد؛ مینی‌اپ برای پروفایل و تولدهای عزیزان به تونل یا URL جداگانه نیاز ندارد. Nginx فقط HTTPS را به برنامهٔ محلی روی `127.0.0.1:8080` می‌رساند.
 
-- Root directory: `webapp`
-- Build command: خالی (بدون build)
-- Build output directory: `.`
+### ۱. آماده‌سازی فایل‌های VPS
 
-بعد از انتشار، آدرس HTTPS که Cloudflare نشان می‌دهد را در `.env` کنار `main.py` قرار دهید:
+نمونهٔ زیر برای Ubuntu/Debian و مسیر `/opt/birthday-bot` است. کد را از مخزن خودت روی VPS دریافت کن؛ فایل `.env` و دیتابیس را جداگانه منتقل کن، چون نباید در Git باشند.
 
-```dotenv
-WEBAPP_URL=https://your-project.pages.dev/
+```sh
+sudo apt update
+sudo apt install -y python3 python3-venv python3-pip nginx certbot python3-certbot-nginx git
+sudo adduser --system --group --home /opt/birthday-bot --no-create-home birthdaybot
+sudo install -d -o birthdaybot -g birthdaybot /opt/birthday-bot
+git clone YOUR_REPOSITORY_SSH_OR_HTTPS_URL /tmp/birthday-bot-source
+sudo cp -a /tmp/birthday-bot-source/. /opt/birthday-bot/
+sudo chown -R birthdaybot:birthdaybot /opt/birthday-bot
+sudo -u birthdaybot python3 -m venv /opt/birthday-bot/.venv
+sudo -u birthdaybot /opt/birthday-bot/.venv/bin/pip install -r /opt/birthday-bot/requirements.txt
 ```
 
-بات را دوباره اجرا کنید. کاربر از دکمهٔ «تبدیل تاریخ» وارد مینی‌اپ می‌شود. برای ثبت تولد خود کاربر، مینی‌اپ از دکمهٔ وب‌اپ کیبورد تلگرام `sendData` استفاده می‌کند؛ بات داده را اعتبارسنجی می‌کند و فقط ماه و روز شمسی را نگه می‌دارد. تاریخ جاری همان سال هم برای تولدهای پیش‌رو قابل ثبت است. سال برای بررسی اعتبارسنجی فرستاده می‌شود و در پایگاه داده ذخیره نمی‌شود.
+اگر مخزن خصوصی است، قبل از `git clone` دسترسی GitHub را برای حساب SSH خودت تنظیم کن. اگر پروژه از قبل در `/opt/birthday-bot` است، `git clone` و کپی را رد کن؛ فایل‌های `.env` و دیتابیس را هرگز با کد جایگزین نکن.
 
-برای پروفایل، عکس کاربر، فهرست تولدهای عزیزان و تغییر یادآوری‌ها، بات یک API کوچک و احراز‌شده را روی `127.0.0.1:8080` اجرا می‌کند. `safe_parse_webapp_init_data` امضای دادهٔ Telegram را بررسی می‌کند و هر درخواست با شناسهٔ کاربر تأییدشده محدود می‌شود. روی کامپیوتر شخصی، API را با ابزار تونل HTTPS مورد اعتمادت به آدرس عمومی موقت وصل کن؛ برای VPS از HTTPS و reverse proxy استفاده کن. در `.env`، `WEBAPP_URL` را روی آدرس Pages بگذار؛ همین مقدار مبدأ مجاز CORS را تعیین می‌کند. سپس در `webapp/api-config.js`، `window.BOT_API_URL` را برابر آدرس HTTPS عمومی API قرار بده و همان پوشهٔ `webapp` را دوباره منتشر کن. آدرس API عمومی است، اما `initData` امضاشده در هر درخواست می‌رود؛ هیچ توکن ربات یا راز API در فایل استاتیک نگذار. `WEBAPP_API_HOST` را روی `127.0.0.1` نگه دار وقتی از تونل محلی استفاده می‌کنی. دیتابیس فقط کنار فرایند بات روی کامپیوتر/VPS می‌ماند.
+### ۲. انتقال امن دیتابیس فعلی
 
-اگر هنوز API عمومی تنظیم نشده باشد، تبدیل تاریخ و ثبت تولد خود کاربر از داخل تلگرام کار می‌کند؛ بخش‌های زندهٔ پروفایل/تولدهای عزیزان پس از اتصال API بارگذاری می‌شوند. محتوای `webapp` استاتیک است؛ `.env`، توکن، دیتابیس SQLite و اطلاعات تولد را در آن قرار ندهید.
+بات را روی کامپیوتر قدیمی متوقف کن تا چیزی در دیتابیس ننویسد. از SQLite backup API یک کپی سازگار بساز؛ این کار WAL را هم درست در نظر می‌گیرد:
 
-دکمهٔ «امروز» و شمارش روزها بر اساس `Asia/Tehran` است تا با `TIMEZONE` پیش‌فرض بات هماهنگ باشد. اگر `TIMEZONE` را در `.env` تغییر می‌دهید، شناسهٔ منطقهٔ زمانی را هم در `webapp/calendar.js` در تابع `todaySerial()` هماهنگ کنید.
+```powershell
+py -3.12 -c "import sqlite3; src=sqlite3.connect('birthdays.db'); dst=sqlite3.connect('birthdays-transfer.db'); src.backup(dst); dst.close(); src.close()"
+scp .\birthdays-transfer.db YOUR_SSH_USER@YOUR_VPS:~/birthdays-transfer.db
+```
+
+با حساب SSH خودت وارد VPS شو و فایل را با مالکیت سرویس نصب کن:
+
+```sh
+sudo install -o birthdaybot -g birthdaybot -m 600 "$HOME/birthdays-transfer.db" /opt/birthday-bot/birthdays.db
+rm "$HOME/birthdays-transfer.db"
+```
+
+فایل `.env` را جداگانه از حساب SSH خودت منتقل و نصب کن؛ آن را داخل مخزن قرار نده:
+
+```powershell
+scp .\.env YOUR_SSH_USER@YOUR_VPS:~/.env-upload
+```
+
+سپس روی VPS:
+
+```sh
+sudo install -o birthdaybot -g birthdaybot -m 600 "$HOME/.env-upload" /opt/birthday-bot/.env
+rm "$HOME/.env-upload"
+```
+
+در `.env` روی VPS تنظیمات فعلی رباتت را نگه دار و این مقادیر را تنظیم کن:
+
+```dotenv
+DB_PATH=/opt/birthday-bot/birthdays.db
+WEBAPP_URL=https://YOUR_DOMAIN/
+WEBAPP_API_HOST=127.0.0.1
+WEBAPP_API_PORT=8080
+WEBAPP_API_ALLOWED_ORIGINS=
+```
+
+`YOUR_DOMAIN` را با دامنه‌ای عوض کن که به IP سرور اشاره می‌کند. آدرس HTTPS را به شکل `https://your-domain/` بنویس. چون سایت و API هم‌مبدأ هستند، `webapp/api-config.js` را تغییر نده و دامنهٔ دیگری در CORS اضافه نکن.
+
+### ۳. راه‌اندازی سرویس ربات و مینی‌اپ
+
+فایل نمونهٔ [birthday-bot.service](deploy/birthday-bot.service) از همین مسیرها استفاده می‌کند. برنامه `.env` را از کنار `main.py` می‌خواند. اگر مسیر یا نام کاربر را تغییر دادی، `User`, `Group`, `WorkingDirectory`, `ExecStart` و `ReadWritePaths` را با آن هماهنگ کن.
+
+```sh
+sudo cp /opt/birthday-bot/deploy/birthday-bot.service /etc/systemd/system/birthday-bot.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now birthday-bot
+sudo systemctl status birthday-bot
+curl http://127.0.0.1:8080/health
+```
+
+پاسخ health باید `{"ok": true}` باشد. آدرس `/` خود مینی‌اپ را می‌دهد؛ فایل‌های استاتیک فقط از `webapp/` سرو می‌شوند. فایل `.env`، دیتابیس، بکاپ‌ها و بقیهٔ سورس‌ها در مسیر استاتیک نیستند.
+
+### ۴. HTTPS با Nginx
+
+در DNS یک رکورد A برای دامنه به IP VPS بگذار و پورت‌های 80 و 443 را در firewall باز کن. فایل HTTP موقت [nginx-birthday-bot-http.conf](deploy/nginx-birthday-bot-http.conf) را نصب کن؛ `bot.example.com` را با دامنه‌ات جایگزین کن:
+
+```sh
+sudo cp /opt/birthday-bot/deploy/nginx-birthday-bot-http.conf /etc/nginx/sites-available/birthday-bot
+sudo sed -i 's/bot.example.com/YOUR_DOMAIN/g' /etc/nginx/sites-available/birthday-bot
+sudo ln -s /etc/nginx/sites-available/birthday-bot /etc/nginx/sites-enabled/birthday-bot
+sudo nginx -t
+sudo systemctl reload nginx
+sudo certbot --nginx -d YOUR_DOMAIN --redirect
+```
+
+Certbot گواهی را می‌گیرد و پیکربندی HTTPS را می‌سازد. اگر ترجیح می‌دهی فایل نهایی را خودت مدیریت کنی، پس از صدور گواهی نمونهٔ [nginx-birthday-bot.conf](deploy/nginx-birthday-bot.conf) را نصب و دامنه را جایگزین کن. بعد:
+
+```sh
+sudo nginx -t
+sudo systemctl reload nginx
+curl https://YOUR_DOMAIN/health
+```
+
+اکنون `https://YOUR_DOMAIN/` باید مینی‌اپ را باز کند. بات باید با همین `WEBAPP_URL` در حال اجرا باشد تا دکمهٔ «تبدیل تاریخ» در تلگرام آدرس جدید را بگیرد؛ اگر `.env` را بعد از شروع سرویس تغییر دادی، `sudo systemctl restart birthday-bot` بزن. اگر قبلاً Main Mini App را در BotFather تنظیم کرده‌ای، نشانی آن را هم به همین URL تغییر بده.
+
+تولد خود کاربر با `sendData` به خود بات فرستاده و اعتبارسنجی می‌شود؛ پروفایل و فهرست عزیزان با API هم‌مبدأ خوانده می‌شوند. API امضای `initData` تلگرام را بررسی می‌کند و رکوردها را با شناسهٔ همان کاربر محدود می‌کند. توکن و اطلاعات کاربران فقط روی VPS هستند.
+
+دکمهٔ «امروز» و شمارش روزها بر اساس `Asia/Tehran` است تا با `TIMEZONE` پیش‌فرض بات هماهنگ باشد. اگر `TIMEZONE` را در `.env` تغییر می‌دهی، شناسهٔ منطقهٔ زمانی را هم در `webapp/calendar.js` در تابع `todaySerial()` هماهنگ کن.
 
 ## امکانات کاربران
 
@@ -85,33 +167,12 @@ WEBAPP_URL=https://your-project.pages.dev/
 
 اگر برنامه دقیقاً بعد از ارسال موفق و قبل از ثبت نتیجه متوقف شود، آن پیام ممکن است هنگام بازیابی صف دوباره ارسال شود؛ Telegram Bot API برای `copyMessage` تضمین ارسال دقیقاً یک‌بار ارائه نمی‌کند. مکالمه نیمه‌تمام پنل در حافظه است؛ بعد از راه‌اندازی دوباره از `/admin` شروع کنید. پیش‌نمایش‌ها و صف تأییدشده در دیتابیس باقی می‌مانند.
 
-## استقرار روی سرور
+## مدیریت سرویس روی سرور
 
-نمونه unit برای systemd (کاربر جدا، ری‌استارت خودکار، خواندن `.env` از کنار پروژه):
-
-```ini
-# /etc/systemd/system/birthday-bot.service
-[Unit]
-Description=Birthday bot
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-User=bot
-WorkingDirectory=/opt/birthday-bot
-ExecStart=/opt/birthday-bot/.venv/bin/python main.py
-Restart=always
-RestartSec=5
-NoNewPrivileges=true
-PrivateTmp=true
-
-[Install]
-WantedBy=multi-user.target
-```
+برای انتقال یکپارچهٔ بات و مینی‌اپ، از دستورهای بخش Linux VPS و فایل systemd داخل `deploy/` استفاده کن. وضعیت و گزارش زنده:
 
 ```sh
-sudo systemctl daemon-reload
-sudo systemctl enable --now birthday-bot
+sudo systemctl status birthday-bot
 journalctl -u birthday-bot -f
 ```
 

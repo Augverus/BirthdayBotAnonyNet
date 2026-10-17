@@ -1,0 +1,23 @@
+[Unit]
+Description=Birthday Telegram bot and Mini App
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=birthdaybot
+Group=birthdaybot
+WorkingDirectory=/opt/birthday-bot
+ExecStart=/opt/birthday-bot/.venv/bin/python /opt/birthday-bot/main.py
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/birthday-bot
+
+[Install]
+WantedBy=multi-user.target

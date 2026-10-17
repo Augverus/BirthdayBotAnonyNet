@@ -1,3 +1,4 @@
-// Set this to the public HTTPS base URL of the bot's API after the VPS is ready.
-// Example: window.BOT_API_URL = 'https://api.example.com';
-window.BOT_API_URL = '';
+// Leave blank when the Mini App and API are served together by the bot on the VPS.
+// Requests then use this page's origin (for example, https://your-domain/api/dashboard).
+window.BOT_API_URL = 'https://licking-contents-postage.ngrok-free.dev';
+
