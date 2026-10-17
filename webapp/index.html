@@ -99,7 +99,7 @@
 </head>
 <body>
   <main>
-    <section class="screen" data-panel="home" aria-labelledby="home-title">
+    <section class="screen" data-panel="home" aria-labelledby="home-title" hidden>
       <div class="home-hero">
         <p class="eyebrow">مدیریت تولدهای تو</p>
         <h1 id="home-title">سلام <span id="home-name">دوست من</span> <svg class="visual-icon animated-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2z"/><path d="m19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z"/></svg></h1>
@@ -148,7 +148,7 @@
 
     </section>
 
-    <section class="screen" data-panel="converter" hidden>
+    <section class="screen" data-panel="converter">
       <section class="card" aria-labelledby="converter-title">
         <header class="section-heading">
           <h2 id="converter-title">تبدیل تاریخ</h2>
@@ -206,8 +206,8 @@
     </section>
   </main>
   <nav class="bottom-nav" aria-label="منوی اصلی">
-    <button class="nav-button" type="button" data-tab="home" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg><span>خانه</span></button>
-    <button class="nav-button" type="button" data-tab="converter"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg><span>تبدیل</span></button>
+    <button class="nav-button" type="button" data-tab="home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg><span>خانه</span></button>
+    <button class="nav-button" type="button" data-tab="converter" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg><span>تبدیل</span></button>
     <button class="nav-button" type="button" data-tab="friends"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2m6-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm6-3a4 4 0 0 1 0 8m2 1a4 4 0 0 1 2 3v1"/></svg><span>عزیزان</span></button>
     <button class="nav-button" type="button" data-tab="account"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><span>حساب</span></button>
   </nav>
