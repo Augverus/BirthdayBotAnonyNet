@@ -83,12 +83,8 @@ def inline(rows):
 
 def date_converter_keyboard():
     if config.WEBAPP_URL:
-        return ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text=DATE_CONVERTER_WEBAPP_BUTTON,
-                                      web_app=WebAppInfo(url=config.WEBAPP_URL))]],
-            resize_keyboard=True,
-            one_time_keyboard=True,
-        )
+        return inline([[button(DATE_CONVERTER_WEBAPP_BUTTON, style='primary', key='since',
+                              web_app=WebAppInfo(url=config.WEBAPP_URL))]])
     return inline([[button('⚙️ راهنمای فعال‌سازی', 'date:setup', 'primary')]])
 
 

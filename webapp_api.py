@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from aiogram.utils.web_app import safe_parse_webapp_init_data
 from aiohttp import web
+import jdatetime
 
 import calendar_utils as cal
 import config
@@ -143,6 +144,42 @@ async def set_birthday_notification(request):
     return web.json_response({"notification": notification})
 
 
+async def save_birthday(request):
+    telegram_user = _telegram_user(request)
+    if not store.claim_rate_limit(telegram_user.id, "miniapp_save_birthday", 2):
+        return _json_error(429, "یه لحظه صبر کن و دوباره امتحان کن.")
+    payload = await _json_payload(request)
+    if (payload is None
+            or not {"calendar", "year", "month", "day"} <= set(payload)
+            or set(payload) - {"calendar", "year", "month", "day", "notification"}):
+        return _json_error(400, "اطلاعات تاریخ درست نیست.")
+    year, month, day = payload["year"], payload["month"], payload["day"]
+    user_record = store.user(telegram_user.id)
+    notification = payload.get("notification", bool(user_record["notification"]) if user_record else True)
+    if (payload["calendar"] != "solar_hijri"
+            or any(type(value) is not int for value in (year, month, day))
+            or not isinstance(notification, bool)
+            or year < 1 or year > cal.today().year
+            or not cal.valid_birthday(month, day)):
+        return _json_error(400, "تاریخ تولد معتبر نیست.")
+    try:
+        jdatetime.date(year, month, day)
+    except (ValueError, TypeError):
+        return _json_error(400, "تاریخ تولد در این سال معتبر نیست.")
+    if not user_record:
+        return _json_error(404, "اول ربات را در تلگرام استارت کن.")
+    store.update_user(telegram_user.id, month=month, day=day, notification=int(notification))
+    callback = request.app.get("on_birthday_saved")
+    if callback:
+        try:
+            await callback(telegram_user.id, month, day, notification)
+        except Exception:
+            # The birthday is already safely stored; a Telegram notification failure
+            # must not turn a successful save into a retry that consumes the rate limit.
+            pass
+    return web.json_response({"birthday": _birthday_record(month, day, notification)})
+
+
 async def add_friend(request):
     telegram_user = _telegram_user(request)
     if not store.claim_rate_limit(telegram_user.id, "miniapp_add_friend", 2):
@@ -201,10 +238,12 @@ async def delete_friend(request):
     return web.json_response({"ok": True})
 
 
-def create_app():
+def create_app(on_birthday_saved=None):
     app = web.Application(client_max_size=16 * 1024, middlewares=[_cors])
+    app["on_birthday_saved"] = on_birthday_saved
     app.router.add_get("/health", health)
     app.router.add_get("/api/dashboard", dashboard)
+    app.router.add_post("/api/birthday", save_birthday)
     app.router.add_patch("/api/birthday/notification", set_birthday_notification)
     app.router.add_post("/api/friends", add_friend)
     app.router.add_patch("/api/friends/{friend_id}", update_friend)
@@ -217,8 +256,8 @@ def create_app():
     return app
 
 
-async def start():
-    runner = web.AppRunner(create_app(), access_log=None)
+async def start(on_birthday_saved=None):
+    runner = web.AppRunner(create_app(on_birthday_saved), access_log=None)
     await runner.setup()
     site = web.TCPSite(runner, config.WEBAPP_API_HOST, config.WEBAPP_API_PORT)
     try:

@@ -23,6 +23,7 @@
     return lo;
   }
   function toCalendar(calendar, serial) { return parts(calendar,serial); }
+  function calendarRange(calendar) { return {minYear:parts(calendar,MIN_DAY).year+1,maxYear:parts(calendar,MAX_DAY-1).year-1}; }
   function parse(value) {
     const normalized=String(value).replace(/[۰-۹]/g,c=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(c))).replace(/[٠-٩]/g,c=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(c))).trim();
     const m=normalized.match(/^\s*(\d{1,4})\s*[\/.-]\s*(\d{1,2})\s*[\/.-]\s*(\d{1,2})\s*$/);
@@ -37,5 +38,5 @@
   function ageSince(birth,today){let years=today.year-birth.year;const anniversary={year:birth.year+years,month:birth.month,day:Math.min(birth.day,daysInGregorianMonth(birth.year+years,birth.month))};if(compare(today,anniversary)<0)years--;const afterYears={year:birth.year+years,month:birth.month,day:Math.min(birth.day,daysInGregorianMonth(birth.year+years,birth.month))};let months=(today.year-afterYears.year)*12+today.month-afterYears.month;let monthMark=addMonths(afterYears,months);if(compare(monthMark,today)>0){months--;monthMark=addMonths(afterYears,months);}const days=Date.UTC(today.year,today.month-1,today.day)/dayMs-Date.UTC(monthMark.year,monthMark.month-1,monthMark.day)/dayMs;return {years,months,days};}
   function difference(serial,today){const delta=serial-today;if(delta===0)return 'این تاریخ، امروزِ.';if(delta>0)return `${delta.toLocaleString('fa-IR')} روز تا این تاریخ مونده.`;const a=ageSince(serialToGregorian(serial),serialToGregorian(today));return `${Math.abs(delta).toLocaleString('fa-IR')} روز از این تاریخ گذشته · سن: ${a.years.toLocaleString('fa-IR')} سال و ${a.months.toLocaleString('fa-IR')} ماه و ${a.days.toLocaleString('fa-IR')} روز.`;}
   function convert(calendar,value){const date=typeof value==='string'?parse(value):value;if(!Number.isInteger(date.year)||date.year<1||date.year>9999||!Number.isInteger(date.month)||!Number.isInteger(date.day))throw new RangeError('تاریخ واردشده معتبر نیست.');const serial=fromCalendar(calendar,date);return {serial,gregorian:toCalendar('gregory',serial),persian:toCalendar('persian',serial),hijri:toCalendar('islamic-umalqura',serial),distance:difference(serial,todaySerial())};}
-  window.DateCalendars={convert,formatDate,fromCalendar,toCalendar,parse,todaySerial};
+  window.DateCalendars={convert,formatDate,fromCalendar,toCalendar,parse,todaySerial,calendarRange};
 })();

@@ -567,7 +567,10 @@ async def save_birthday(message, uid, month, day, bot, notification=1):
     days = cal.remaining(month, day)
     text = f'{ui.emoji("on", "✅")} <b>تولدت ثبت شد!</b>\n\n{ui.emoji("birthday", "🎂")} {cal.birthday_text(month, day)}\n'
     text += f'{ui.emoji("birthday", "🎂")} امروز روز توئه؛ تولدت مبارک!' if days==0 else f'{ui.emoji("until", "⏳")} <b>{days} روز</b> تا جشن تولدت!'
-    await message.answer(text, parse_mode='HTML', reply_markup=ui.home(uid))
+    if message is None:
+        await bot.send_message(uid, text, parse_mode='HTML', reply_markup=ui.home(uid))
+    else:
+        await message.answer(text, parse_mode='HTML', reply_markup=ui.home(uid))
     await notify_admin(bot, f'🎂 تولد ثبت شد.\nشناسه: <code>{uid}</code>\n{cal.birthday_text(month,day)}', uid)
 
 
@@ -695,7 +698,10 @@ async def _run_bot():
                 store.set_setting('custom_emoji', '0')
                 log.warning('Custom emoji lookup unavailable; using text without icons')
         try:
-            api_runner = await webapp_api.start()
+            async def mini_app_birthday_saved(uid, month, day, notification):
+                await save_birthday(None, uid, month, day, bot, int(notification))
+
+            api_runner = await webapp_api.start(mini_app_birthday_saved)
             log.info('Mini App profile API listening on %s:%s',
                      config.WEBAPP_API_HOST, config.WEBAPP_API_PORT)
         except OSError:
