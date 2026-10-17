@@ -1,0 +1,10 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/anonynet2aryanmo/birthdaybot
+    - /bin/mkdir -p "$DEPLOYPATH"
+    - /bin/cp -f admin_panel.py calendar_utils.py config.py main.py runtime_jobs.py store.py ui.py webapp_api.py passenger_wsgi.py requirements.txt "$DEPLOYPATH/"
+    - /bin/mkdir -p "$DEPLOYPATH/webapp"
+    - /bin/cp -R webapp/. "$DEPLOYPATH/webapp/"
+    - /bin/mkdir -p "$DEPLOYPATH/tmp"
+    - /usr/bin/touch "$DEPLOYPATH/tmp/restart.txt"
