@@ -1,4 +1,5 @@
 """Tests for the private user-facing flows in ``main``."""
+import json
 from types import SimpleNamespace
 
 import calendar_utils as cal
@@ -361,9 +362,7 @@ class UserFlowTestCase(AsyncBotTestCase):
         )
         await main.mini_app_data_handler(message, self.bot)
         self.assertIsNone(store.user(7)['month'])
-        message.web_app_data = SimpleNamespace(
-            data=' ' * 4097, button_text=ui.DATE_CONVERTER_WEBAPP_BUTTON,
-        )
+        message.web_app_data = SimpleNamespace(data=' ' * 4097, button_text=ui.DATE_CONVERTER_WEBAPP_BUTTON)
         await main.mini_app_data_handler(message, self.bot)
         self.assertIsNone(store.user(7)['month'])
         message = self.msg(None)
@@ -371,6 +370,18 @@ class UserFlowTestCase(AsyncBotTestCase):
         message.web_app_data = SimpleNamespace(data='{"action":"save_birthday","calendar":"solar_hijri","year":1403,"month":1,"day":1}', button_text=ui.DATE_CONVERTER_WEBAPP_BUTTON)
         await main.mini_app_data_handler(message, self.bot)
         self.assertIsNone(store.user(7)['month'])
+
+    async def test_mini_app_accepts_upcoming_birthday_in_current_solar_year(self):
+        message = self.msg(None)
+        message.web_app_data = SimpleNamespace(
+            data=json.dumps({
+                'action': 'save_birthday', 'calendar': 'solar_hijri',
+                'year': cal.today().year, 'month': 12, 'day': 1,
+            }),
+            button_text=ui.DATE_CONVERTER_WEBAPP_BUTTON,
+        )
+        await main.mini_app_data_handler(message, self.bot)
+        self.assertEqual((store.user(7)['month'], store.user(7)['day']), (12, 1))
 
     # --- home keyboard -----------------------------------------------------
     async def test_home_keyboard_tracks_registration(self):

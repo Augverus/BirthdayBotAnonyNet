@@ -17,8 +17,9 @@
       $('gregorian-result').textContent=DateCalendars.formatDate(result.gregorian);
       $('hijri-result').textContent=DateCalendars.formatDate(result.hijri);
       $('distance').textContent=result.distance;
-      save.disabled=!hasSendData||result.serial>today;
-      if(result.serial>today&&hasSendData)saveHint.textContent='برای ثبت تولد، تاریخ امروز یا گذشته رو انتخاب کن.';
+      const currentPersianYear=DateCalendars.toCalendar('persian',today).year;
+      save.disabled=!hasSendData||result.persian.year>currentPersianYear;
+      if(result.persian.year>currentPersianYear&&hasSendData)saveHint.textContent='سال تولد نمی‌تونه در آینده باشه.';
       else if(hasSendData)saveHint.textContent='سال فقط برای بررسی تاریخ استفاده می‌شه؛ بات ماه و روز رو نگه می‌داره.';
       save.dataset.persian=JSON.stringify(result.persian);
     }catch(e){

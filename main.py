@@ -20,6 +20,7 @@ import config
 import runtime_jobs
 import store
 import ui
+import webapp_api
 
 log = logging.getLogger(__name__)
 dp = Dispatcher(events_isolation=SimpleEventIsolation())
@@ -291,7 +292,9 @@ async def mini_app_data_handler(message: Message, bot):
             raise ValueError
         year, month, day = payload['year'], payload['month'], payload['day']
         birthday = jdatetime.date(year, month, day)
-        if birthday > cal.today() or not cal.valid_birthday(month, day):
+        # The selected date can be later this year: birthdays store month/day only.
+        # Reject future years while allowing an upcoming birthday in the current year.
+        if year > cal.today().year or not cal.valid_birthday(month, day):
             raise ValueError
     except (ValueError, TypeError, KeyError, json.JSONDecodeError, RecursionError):
         await message.answer('تاریخ ارسالی معتبر نیست؛ تاریخ را دوباره بررسی کن.')
@@ -691,6 +694,13 @@ async def _run_bot():
             except TelegramAPIError:
                 store.set_setting('custom_emoji', '0')
                 log.warning('Custom emoji lookup unavailable; using text without icons')
+        try:
+            api_runner = await webapp_api.start()
+            log.info('Mini App profile API listening on %s:%s',
+                     config.WEBAPP_API_HOST, config.WEBAPP_API_PORT)
+        except OSError:
+            api_runner = None
+            log.exception('Mini App profile API could not start; profile and friends data will be unavailable')
         tasks = [asyncio.create_task(runtime_jobs.supervised(worker, bot))
                  for worker in (runtime_jobs.delivery_worker, runtime_jobs.reminder_worker,
                                 runtime_jobs.backup_worker)]
@@ -707,6 +717,8 @@ async def _run_bot():
             for task in tasks:
                 with suppress(asyncio.CancelledError):
                     await task
+            if api_runner:
+                await api_runner.cleanup()
 
 
 async def main():

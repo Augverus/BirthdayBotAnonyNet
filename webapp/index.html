@@ -3,54 +3,575 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#090a09">
-  <meta name="description" content="تبدیل تاریخ شمسی، میلادی و قمری ام‌القری">
-  <title>مبدل تاریخ</title>
-  <link rel="stylesheet" href="./style.css">
+  <meta name="color-scheme" content="dark">
+  <title>تولد عزیزان | مینی‌اپ</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script defer src="./calendar.js"></script>
+  <script src="./api-config.js"></script>
+  <script src="./calendar.js"></script>
   <script defer src="./app.js"></script>
+  <style>
+    :root { color-scheme: dark; --bg: #080a0b; --fg: #f4f5f7; --muted: #929b9f; --card: #121719; --accent: #e6bd63; --accent-dark: #f4d98f; --accentText: #17130b; --line: #283033; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: max(18px, env(safe-area-inset-top)) 16px calc(112px + env(safe-area-inset-bottom)); background: radial-gradient(ellipse at 50% 0%, #46361a33 0, transparent 42%), var(--bg); color: var(--fg); font: 15px/1.7 system-ui, sans-serif; }
+    main { max-width: 540px; margin: 0 auto; }
+    .profile-card, .card { border: 1px solid #252d30; border-radius: 24px; background: linear-gradient(145deg, #151a1c, #101415); box-shadow: 0 12px 34px #0006; }
+    .profile-card { padding: 18px; margin: 4px 0 16px; }
+    .profile-head { display: flex; align-items: center; gap: 14px; }
+    .avatar { display: grid; place-items: center; flex: 0 0 58px; width: 58px; height: 58px; overflow: hidden; border: 2px solid #e6bd63; border-radius: 50%; background: #302617; color: var(--accent-dark); font-size: 23px; font-weight: 800; box-shadow: 0 0 18px #d9a94335; }
+    .profile-copy { min-width: 0; }
+    .avatar img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+    .visual-icon { width: 1.18em; height: 1.18em; margin-inline-end: .22em; vertical-align: -.2em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; color: var(--accent-dark); }
+    .animated-icon { animation: icon-glow 2.2s ease-in-out infinite alternate; }
+    .icon-label { display: inline-flex; align-items: center; gap: .35em; }
+    @keyframes icon-glow { from { filter: drop-shadow(0 0 0 #e6bd6300); transform: translateY(0); } to { filter: drop-shadow(0 0 5px #e6bd6399); transform: translateY(-1px); } }
+    @media (prefers-reduced-motion: reduce) { .animated-icon { animation: none; } }
+    h1 { margin: 0; overflow-wrap: anywhere; font-size: 1.2rem; font-weight: 800; }
+    .username { margin: 2px 0 0; color: var(--accent-dark); direction: ltr; text-align: right; }
+    .profile-id { display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; padding: 8px 11px; border: 1px solid #292f32; border-radius: 13px; background: #0b0e0f; color: var(--muted); font-size: .88rem; }
+    .profile-id strong { color: var(--fg); direction: ltr; unicode-bidi: isolate; }
+    .birthday-box { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding: 12px; border: 1px solid #70572866; border-radius: 16px; background: linear-gradient(110deg, #211b11, #15191b); }
+    .birthday-box strong, .birthday-box span { display: block; }
+    .birthday-box strong { color: var(--accent-dark); }
+    .birthday-box span { color: var(--muted); font-size: .88rem; }
+    .countdown { flex: 0 0 auto; color: var(--fg); font-weight: 750; text-align: left; }
+    .status { margin-top: 10px; color: var(--muted); font-size: .82rem; }
+    .card { padding: 19px; margin: 0 0 16px; }
+    .section-heading { margin: 0 0 14px; }
+    .section-heading h2 { margin: 0; font-size: 1.08rem; font-weight: 800; }
+    .section-heading p { margin: 3px 0 0; color: var(--muted); font-size: .88rem; }
+    .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; padding: 5px; border: 1px solid #252c2f; border-radius: 19px; background: #0c1011; margin-bottom: 15px; }
+    button, input, select { font: inherit; }
+    .tab { border: 0; border-radius: 15px; padding: 11px 6px; color: #a0a9ac; background: transparent; font-size: .88rem; font-weight: 700; transition: background .18s ease, color .18s ease, transform .18s ease; }
+    .tab.active { background: linear-gradient(135deg, #e6bd63, #c49335); color: var(--accentText); box-shadow: 0 4px 18px #d4a4444d; }
+    .tab:active, .primary:active, .secondary:active { transform: scale(.98); }
+    label { display: block; margin-bottom: 7px; color: #e4e7e8; font-weight: 700; }
+    input, select { width: 100%; min-height: 48px; padding: 11px 13px; border: 1px solid #30383b; border-radius: 14px; color: var(--fg); background: #090c0d; outline: none; color-scheme: dark; transition: border-color .18s ease, box-shadow .18s ease; }
+    input[type="date"] { direction: ltr; text-align: center; }
+    input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 4px #e6bd6325; }
+    .primary, .secondary, .delete-friend { border-radius: 999px; font-weight: 800; transition: transform .18s ease, box-shadow .18s ease; }
+    .primary { width: 100%; min-height: 52px; border: 0; padding: 12px 16px; background: linear-gradient(135deg, #e6bd63, #c49335); color: #17130b; box-shadow: 0 7px 22px #d4a4444d; }
+    .primary:hover { box-shadow: 0 9px 28px #f4d98f66; }
+    .secondary { width: 100%; min-height: 48px; border: 1px solid #7b633888; padding: 10px 14px; background: #201b11; color: var(--accent-dark); }
+    .result { margin-top: 13px; min-height: 0; color: var(--accent-dark); font-weight: 750; overflow-wrap: anywhere; }
+    .result:not(:empty) { padding: 11px 13px; border: 1px solid #e6bd6333; border-radius: 14px; background: #211b11; }
+    .date-grid { display: grid; grid-template-columns: 1fr; gap: 9px; margin-top: 14px; }
+    .date-result { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 13px; border: 1px solid #303730; border-radius: 15px; background: #0d100e; }
+    .date-result span { color: var(--muted); font-size: .88rem; }
+    .date-result strong { font-size: 1rem; font-variant-numeric: tabular-nums; }
+    .distance { margin: 12px 0 0; padding: 12px; border: 1px solid #5c4a2c; border-radius: 14px; background: #211b11; color: var(--accent-dark); font-weight: 700; text-align: center; }
+    .error, .status.error { color: #ff8e9b; }
+    .friend-list { display: grid; gap: 9px; margin-bottom: 12px; }
+    .friend { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px; border: 1px solid #292f32; border-radius: 17px; background: #0d1112; }
+    .friend-info { min-width: 0; }
+    .friend-name { overflow-wrap: anywhere; font-weight: 800; }
+    .friend-date, .friend-reminder { color: var(--muted); font-size: .82rem; }
+    .friend-days { color: var(--accent-dark); font-weight: 750; font-size: .85rem; }
+    .delete-friend { flex: 0 0 40px; width: 40px; height: 40px; border: 1px solid #6a343c; background: #241518; color: #ff9ba6; }
+    .friend-actions { display: flex; gap: 8px; }
+    .toggle-friend { display: grid; place-items: center; flex: 0 0 40px; width: 40px; height: 40px; border: 1px solid #7b633888; border-radius: 999px; background: #201b11; color: var(--accent-dark); transition: transform .18s ease; }
+    .toggle-friend:active { transform: scale(.97); }
+    .toggle-friend[data-notification="0"] { border-color: #3a4144; background: #14181a; color: var(--muted); }
+    .empty-state { padding: 15px 10px; color: var(--muted); text-align: center; }
+    .friend-form { margin-top: 13px; padding: 14px; border: 1px solid #40321b; border-radius: 18px; background: #0c0e11; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .form-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 13px; }
+    .check-row { display: flex; align-items: center; gap: 9px; margin-top: 10px; color: var(--muted); font-size: .9rem; }
+    .check-row input { width: 18px; min-height: 18px; accent-color: var(--accent); }
+    [hidden] { display: none !important; }
+    .foot { color: var(--muted); font-size: .84rem; text-align: center; margin: 17px 4px 0; }
+    .screen { animation: screen-in .2s ease both; }
+    .home-hero { padding: 22px 18px; border: 1px solid #4a3b22; border-radius: 26px; background: radial-gradient(ellipse at 100% 0, #302617 0, transparent 62%), linear-gradient(145deg, #15151b, #101314); box-shadow: 0 12px 34px #0006; margin: 4px 0 16px; }
+    .home-hero .eyebrow { color: var(--accent-dark); font-size: .88rem; margin: 0 0 4px; }
+    .home-hero h1 { font-size: 1.35rem; }
+    .home-hero p { color: var(--muted); margin: 7px 0 0; }
+    .home-links { display: grid; gap: 10px; margin-top: 14px; }
+    .home-link { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 15px; border: 1px solid #292f32; border-radius: 18px; background: linear-gradient(145deg, #151a1c, #101415); color: var(--fg); text-align: right; font: inherit; font-weight: 750; }
+    .home-link span:last-child { color: var(--accent-dark); font-size: 1.2rem; }
+    .bottom-nav { position: fixed; z-index: 20; left: 16px; right: 16px; bottom: max(12px, env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 540px; margin: 0 auto; padding: 5px; border: 1px solid #4a3b22; border-radius: 999px; background: rgb(10 11 16 / 94%); box-shadow: 0 10px 32px #0009; backdrop-filter: blur(18px); }
+    .nav-button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-width: 0; min-height: 62px; padding: 5px 2px; border: 1px solid transparent; border-radius: 999px; color: #9296a5; background: transparent; font: inherit; font-size: .72rem; line-height: 1.4; transition: background .18s ease, color .18s ease; }
+    .nav-button svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .nav-button[aria-current="page"] { border-color: #7b633888; color: var(--accent-dark); background: #201b11; }
+    .nav-button:active { transform: scale(.97); }
+    @keyframes screen-in { from { opacity: .55; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    @media (prefers-reduced-motion: reduce) { .screen { animation: none; } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; } }
+  </style>
 </head>
 <body>
   <main>
-    <header class="hero">
-      <span class="mark" aria-hidden="true">◷</span>
-      <p class="eyebrow">تقویم، به زبان ساده</p>
-      <h1>مبدل تاریخ</h1>
-      <p class="intro">تاریخت رو وارد کن تا معادلش رو توی هر سه تقویم ببینی.</p>
-    </header>
-
-    <section class="card entry" aria-labelledby="entry-title">
-      <div class="section-title"><span class="number">۱</span><div><h2 id="entry-title">تاریخ ورودی</h2><p>تقویم و تاریخ دلخواهت رو انتخاب کن</p></div></div>
-      <label for="calendar">نوع تقویم</label>
-      <select id="calendar">
-        <option value="persian">شمسی</option>
-        <option value="gregory">میلادی</option>
-        <option value="islamic-umalqura">قمری ام‌القری</option>
-      </select>
-      <label for="date">تاریخ</label>
-      <input id="date" type="text" inputmode="numeric" autocomplete="off" placeholder="۱۴۰۵/۰۱/۰۱" aria-describedby="date-hint">
-      <p class="hint" id="date-hint">سال / ماه / روز — اعداد فارسی و انگلیسی پذیرفته می‌شن.</p>
-      <button class="button secondary" id="today" type="button">امروز</button>
-      <p id="error" class="error" role="alert" hidden></p>
-    </section>
-
-    <section class="card results" aria-labelledby="results-title">
-      <div class="section-title"><span class="number">۲</span><div><h2 id="results-title">معادل تاریخ</h2><p>با هر تغییری، نتیجه همون لحظه به‌روز می‌شه</p></div></div>
-      <div class="date-grid" aria-live="polite">
-        <article class="date-result"><span>شمسی</span><strong id="persian-result">—</strong></article>
-        <article class="date-result"><span>میلادی</span><strong id="gregorian-result">—</strong></article>
-        <article class="date-result"><span>قمری ام‌القری</span><strong id="hijri-result">—</strong></article>
+    <section class="screen" data-panel="home" aria-labelledby="home-title">
+      <div class="home-hero">
+        <p class="eyebrow">مدیریت تولدهای تو</p>
+        <h1 id="home-title">سلام <span id="home-name">دوست من</span> <svg class="visual-icon animated-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2z"/><path d="m19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z"/></svg></h1>
+        <p>همه‌چیز برای تولدهای خودت و عزیزانت، یک‌جا.</p>
       </div>
-      <p class="distance" id="distance" aria-live="polite">برای دیدن فاصله تا امروز، یک تاریخ وارد کن.</p>
+      <div class="birthday-box">
+        <div><strong><svg class="visual-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14v9H5zM3 12h18M12 12v9M12 12c-4 0-5-2-5-4 3 0 5 1 5 4zm0 0c0-3 2-5 5-5 0 3-2 5-5 5z"/></svg> تولد من</strong><span id="home-birthday">در حال بارگذاری…</span></div>
+        <div class="countdown" id="home-countdown"></div>
+      </div>
+      <div class="home-links">
+        <button class="home-link" type="button" data-open-panel="friends"><span><svg class="visual-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="7" r="3"/><circle cx="16" cy="7" r="3"/><path d="M8 10v8l-2 3m10-11v8l2 3M8 18h8"/></svg> تولد عزیزان</span><span>←</span></button>
+        <button class="home-link" type="button" data-open-panel="converter"><span><svg class="visual-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18m-13 4h2m4 0h2m-8 4h2"/></svg> تبدیل تاریخ</span><span>←</span></button>
+        <button class="home-link" type="button" data-open-panel="account"><span><svg class="visual-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> پروفایل من</span><span>←</span></button>
+      </div>
     </section>
 
-    <section class="card save-card" aria-labelledby="save-title">
-      <div class="section-title"><span class="number">۳</span><div><h2 id="save-title">ثبت تولد خودم</h2><p>فقط ماه و روز برای یادآوری بات ذخیره می‌شه.</p></div></div>
-      <button class="button primary" id="save" type="button" disabled>ثبت این تاریخ در بات</button>
-      <p class="hint" id="save-hint" aria-live="polite">برای ثبت تولد، این صفحه رو از داخل بات باز کن.</p>
+    <section class="screen" data-panel="account" hidden>
+    <section class="profile-card" aria-label="پروفایل تلگرام">
+      <div class="profile-head">
+        <div class="avatar" id="profile-avatar" aria-hidden="true">ک</div>
+        <div class="profile-copy">
+          <h1 id="profile-name">پروفایل تلگرام</h1>
+          <p class="username" id="profile-username">در حال دریافت اطلاعات…</p>
+        </div>
+      </div>
+      <div class="profile-id"><span>شناسهٔ کاربری</span><strong id="profile-id">—</strong></div>
+      <div class="birthday-box">
+        <div><strong><svg class="visual-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14v9H5zM3 12h18M12 12v9M12 12c-4 0-5-2-5-4 3 0 5 1 5 4zm0 0c0-3 2-5 5-5 0 3-2 5-5 5z"/></svg> تولد من</strong><span id="my-birthday">در حال بارگذاری…</span></div>
+        <div class="countdown" id="my-countdown"></div>
+      </div>
+      <button class="secondary" id="edit-birthday-button" type="button" style="margin-top: 12px">✏️ ویرایش تاریخ تولدم</button>
+      <form class="friend-form" id="birthday-form" hidden>
+        <div class="form-grid">
+          <div><label for="my-month">ماه تولد</label><select id="my-month" name="month" required></select></div>
+          <div><label for="my-day">روز تولد</label><select id="my-day" name="day" required></select></div>
+        </div>
+        <label class="check-row"><input id="my-notification" type="checkbox" checked> روز تولدم یادآوری بشه</label>
+        <div class="form-actions">
+          <button class="primary" type="submit">ذخیره تولد</button>
+          <button class="secondary" id="cancel-birthday" type="button">بی‌خیال</button>
+        </div>
+        <div class="status" id="birthday-status" aria-live="polite"></div>
+      </form>
+      <div class="status" id="api-status" aria-live="polite"></div>
     </section>
-    <footer>تاریخ کامل فقط روی همین دستگاه پردازش می‌شه.</footer>
+
+    </section>
+
+    <section class="screen" data-panel="converter" hidden>
+      <section class="card" aria-labelledby="converter-title">
+        <header class="section-heading">
+          <h2 id="converter-title">تبدیل تاریخ</h2>
+          <p>تاریخ رو یک‌بار وارد کن و معادلش رو در سه تقویم ببین.</p>
+        </header>
+        <label for="calendar">تقویم ورودی</label>
+        <select id="calendar">
+          <option value="persian">شمسی</option>
+          <option value="gregory">میلادی</option>
+          <option value="islamic-umalqura">قمری ام‌القری</option>
+        </select>
+        <label for="date">تاریخ (سال/ماه/روز)</label>
+        <input id="date" type="text" inputmode="numeric" autocomplete="off" placeholder="۱۴۰۳/۰۱/۰۱" aria-describedby="date-hint">
+        <p class="status" id="date-hint">با تغییر تاریخ یا تقویم، نتیجه همون لحظه به‌روز می‌شه.</p>
+        <button id="today" class="secondary" type="button">امروز</button>
+        <p id="error" class="status error" role="alert" hidden></p>
+        <div class="date-grid" aria-live="polite">
+          <article class="date-result"><span>شمسی</span><strong id="persian-result">—</strong></article>
+          <article class="date-result"><span>میلادی</span><strong id="gregorian-result">—</strong></article>
+          <article class="date-result"><span>قمری ام‌القری</span><strong id="hijri-result">—</strong></article>
+        </div>
+        <p class="distance" id="distance" aria-live="polite">فاصلهٔ این تاریخ تا امروز نمایش داده می‌شه.</p>
+        <button id="save" class="primary" type="button" disabled>ثبت تاریخ تولدم</button>
+        <p class="status" id="save-hint" aria-live="polite">از داخل بات بازش کن تا تاریخ تولدت ذخیره بشه.</p>
+      </section>
+    </section>
+
+    <section class="screen" data-panel="friends" hidden>
+    <section class="card" aria-labelledby="friends-title">
+      <header class="section-heading">
+        <h2 id="friends-title"><svg class="visual-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2m3-13a3 3 0 0 1 0 6m1 2a5 5 0 0 1 3 5"/></svg> تولد عزیزان</h2>
+        <p>تولدهایی که برای دوست‌ها و خانواده‌ات ثبت کردی.</p>
+      </header>
+      <div class="friend-list" id="friends-list" aria-live="polite">
+        <div class="empty-state">در حال بارگذاری تولدها…</div>
+      </div>
+      <button class="secondary" id="add-friend-button" type="button">＋ افزودن تولد</button>
+      <form class="friend-form" id="friend-form" hidden>
+        <label for="friend-name">اسمش چیه؟</label>
+        <input id="friend-name" name="name" type="text" maxlength="80" autocomplete="off" required placeholder="مثلاً نازنین">
+        <div class="form-grid" style="margin-top: 11px">
+          <div><label for="friend-month">ماه تولد</label><select id="friend-month" name="month" required></select></div>
+          <div><label for="friend-day">روز تولد</label><select id="friend-day" name="day" required></select></div>
+        </div>
+        <label class="check-row"><input id="friend-notification" type="checkbox" checked> روز تولدش بهم یادآوری کن</label>
+        <div class="form-actions">
+          <button class="primary" type="submit">ثبت تولد</button>
+          <button class="secondary" id="cancel-friend" type="button">بی‌خیال</button>
+        </div>
+        <div class="status" id="form-status" aria-live="polite"></div>
+      </form>
+    </section>
+
+    <p class="foot"><svg class="visual-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3m-4 4v3"/></svg> اطلاعات تولد فقط برای حساب خودت نمایش داده می‌شه.</p>
+    </section>
   </main>
+  <nav class="bottom-nav" aria-label="منوی اصلی">
+    <button class="nav-button" type="button" data-tab="home" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg><span>خانه</span></button>
+    <button class="nav-button" type="button" data-tab="converter"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg><span>تبدیل</span></button>
+    <button class="nav-button" type="button" data-tab="friends"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2m6-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm6-3a4 4 0 0 1 0 8m2 1a4 4 0 0 1 2 3v1"/></svg><span>عزیزان</span></button>
+    <button class="nav-button" type="button" data-tab="account"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><span>حساب</span></button>
+  </nav>
+  <script>
+    (() => {
+      const app = window.Telegram && window.Telegram.WebApp;
+      if (app) { app.ready(); app.expand(); }
+      const apiBase = String(window.BOT_API_URL || '').replace(/\/+$/, '');
+      const initData = app && app.initData;
+      const initUser = app && app.initDataUnsafe && app.initDataUnsafe.user;
+      const numberFa = new Intl.NumberFormat('fa-IR');
+      const months = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'];
+      const status = document.getElementById('api-status');
+      const friendsList = document.getElementById('friends-list');
+      const birthdayText = document.getElementById('my-birthday');
+      const countdownText = document.getElementById('my-countdown');
+      const form = document.getElementById('friend-form');
+      const formStatus = document.getElementById('form-status');
+
+      function openPanel(name) {
+        document.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== name; });
+        document.querySelectorAll('[data-tab]').forEach(tab => {
+          if (tab.dataset.tab === name) tab.setAttribute('aria-current', 'page');
+          else tab.removeAttribute('aria-current');
+        });
+        if (app && app.HapticFeedback) app.HapticFeedback.selectionChanged();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      document.querySelectorAll('[data-tab]').forEach(tab => tab.addEventListener('click', () => openPanel(tab.dataset.tab)));
+      document.querySelectorAll('[data-open-panel]').forEach(button => button.addEventListener('click', () => openPanel(button.dataset.openPanel)));
+
+      function showProfile(user) {
+        if (!user) {
+          document.getElementById('profile-name').textContent = 'پروفایل تلگرام';
+          document.getElementById('home-name').textContent = 'دوست من';
+          document.getElementById('profile-username').textContent = 'مینی‌اپ رو از داخل تلگرام باز کن';
+          document.getElementById('profile-id').textContent = '—';
+          return;
+        }
+        const name = [user.first_name, user.last_name].filter(Boolean).join(' ').trim();
+        document.getElementById('profile-name').textContent = name || 'کاربر تلگرام';
+        document.getElementById('home-name').textContent = (name || 'دوست من').split(' ')[0];
+        document.getElementById('profile-username').textContent = user.username ? '@' + user.username : 'کاربر تلگرام';
+        document.getElementById('profile-id').textContent = user.id ? String(user.id) : '—';
+        const avatar = document.getElementById('profile-avatar');
+        const initial = (name || 'ک').slice(0, 1);
+        const photoUrl = typeof user.photo_url === 'string' ? user.photo_url : '';
+        let safePhotoUrl = '';
+        try {
+          const parsedPhotoUrl = new URL(photoUrl);
+          if (parsedPhotoUrl.protocol === 'https:') safePhotoUrl = parsedPhotoUrl.href;
+        } catch { /* Telegram may omit the optional photo URL. */ }
+        if (safePhotoUrl) {
+          let image = avatar.querySelector('img');
+          if (!image || image.dataset.photoUrl !== safePhotoUrl) {
+            image = document.createElement('img');
+            image.alt = name ? 'عکس پروفایل ' + name : 'عکس پروفایل تلگرام';
+            image.loading = 'eager';
+            image.decoding = 'async';
+            image.referrerPolicy = 'no-referrer';
+            image.dataset.photoUrl = safePhotoUrl;
+            image.addEventListener('error', () => { image.remove(); avatar.textContent = initial; }, { once: true });
+            avatar.replaceChildren(image);
+            image.src = safePhotoUrl;
+          }
+        } else if (!avatar.querySelector('img')) {
+          avatar.textContent = initial;
+        }
+      }
+
+      function createIcon(name) {
+        const paths = {
+          celebrate: [['path', { d: 'm12 2 1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2z' }], ['path', { d: 'm19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z' }]],
+          leaf: [['path', { d: 'M20 4c-8 0-14 3-14 10a6 6 0 0 0 6 6c7 0 8-8 8-16z' }], ['path', { d: 'M4 21c3-5 7-8 12-11' }]],
+          bell: [['path', { d: 'M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12h4' }]],
+          bellOff: [['path', { d: 'M3 3l18 18M10 5a6 6 0 0 1 8 5c0 7 3 7 3 9H8m-4 0c0-2 3-2 3-9a6 6 0 0 1 .5-2.5M10 21h4' }]],
+          warning: [['path', { d: 'M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0z' }], ['path', { d: 'M12 9v4m0 3h.01' }]]
+        };
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('class', 'visual-icon');
+        svg.setAttribute('aria-hidden', 'true');
+        for (const [tag, attrs] of paths[name] || paths.celebrate) {
+          const shape = document.createElementNS('http://www.w3.org/2000/svg', tag);
+          for (const [key, value] of Object.entries(attrs)) shape.setAttribute(key, value);
+          svg.append(shape);
+        }
+        return svg;
+      }
+      function setIconLabel(target, iconName, text) {
+        const icon = createIcon(iconName);
+        icon.classList.add('animated-icon');
+        target.replaceChildren(icon, document.createTextNode(text));
+      }
+
+      function setStatus(message, isError = false) {
+        status.textContent = message;
+        status.classList.toggle('error', isError);
+      }
+
+      function renderBirthday(birthday) {
+        const editButton = document.getElementById('edit-birthday-button');
+        if (!birthday) {
+          birthdayText.textContent = 'تولدت هنوز توی بات ثبت نشده.';
+          countdownText.textContent = '';
+          document.getElementById('home-birthday').textContent = 'تولدت هنوز ثبت نشده.';
+          document.getElementById('home-countdown').textContent = '';
+          editButton.textContent = '🎂 ثبت تاریخ تولدم';
+          return;
+        }
+        birthdayText.textContent = `${numberFa.format(birthday.day)} ${months[birthday.month - 1]}`;
+        document.getElementById('home-birthday').textContent = birthdayText.textContent;
+        if (birthday.days_remaining === 0) setIconLabel(countdownText, 'celebrate', 'امروز روز توئه');
+        else countdownText.textContent = `${numberFa.format(birthday.days_remaining)} روز مونده`;
+        const homeCountdown = document.getElementById('home-countdown');
+        homeCountdown.replaceChildren(...Array.from(countdownText.childNodes, node => node.cloneNode(true)));
+        editButton.textContent = '✏️ ویرایش تاریخ تولدم';
+        const monthSelect = document.getElementById('my-month');
+        const daySelect = document.getElementById('my-day');
+        monthSelect.value = String(birthday.month);
+        updateMyDays();
+        daySelect.value = String(birthday.day);
+        document.getElementById('my-notification').checked = birthday.notification !== false;
+      }
+
+      function renderFriends(friends) {
+        friendsList.replaceChildren();
+        if (!friends.length) {
+          const empty = document.createElement('div');
+          empty.className = 'empty-state';
+          setIconLabel(empty, 'leaf', 'هنوز تولدی اضافه نکردی؛ از دکمهٔ پایین شروع کن');
+          friendsList.append(empty);
+          return;
+        }
+        for (const friend of friends) {
+          const item = document.createElement('article');
+          item.className = 'friend';
+          const info = document.createElement('div');
+          info.className = 'friend-info';
+          const name = document.createElement('div');
+          name.className = 'friend-name';
+          name.textContent = friend.name;
+          const date = document.createElement('div');
+          date.className = 'friend-date';
+          date.textContent = `${numberFa.format(friend.day)} ${months[friend.month - 1]}`;
+          const days = document.createElement('div');
+          days.className = 'friend-days';
+          if (friend.days_remaining === 0) setIconLabel(days, 'celebrate', 'امروز تولدشه');
+          else days.textContent = `${numberFa.format(friend.days_remaining)} روز مونده`;
+          const reminder = document.createElement('div');
+          reminder.className = 'friend-reminder';
+          setIconLabel(reminder, friend.notification ? 'bell' : 'bellOff', friend.notification ? 'یادآوری روشنه' : 'یادآوری خاموشه');
+          info.append(name, date, days, reminder);
+          const actions = document.createElement('div');
+          actions.className = 'friend-actions';
+          const toggle = document.createElement('button');
+          toggle.className = 'toggle-friend';
+          toggle.type = 'button';
+          toggle.dataset.toggleFriend = String(friend.id);
+          toggle.dataset.notification = friend.notification ? '1' : '0';
+          toggle.append(createIcon(friend.notification ? 'bell' : 'bellOff'));
+          toggle.setAttribute('aria-label', `${friend.notification ? 'خاموش کردن' : 'روشن کردن'} یادآوری تولد ${friend.name}`);
+          const remove = document.createElement('button');
+          remove.className = 'delete-friend';
+          remove.type = 'button';
+          remove.dataset.deleteFriend = String(friend.id);
+          remove.setAttribute('aria-label', `حذف تولد ${friend.name}`);
+          remove.textContent = '×';
+          actions.append(toggle, remove);
+          item.append(info, actions);
+          friendsList.append(item);
+        }
+      }
+
+      async function apiRequest(path, options = {}) {
+        if (!apiBase) throw new Error('اتصال به اطلاعات بات هنوز تنظیم نشده.');
+        if (!initData) throw new Error('مینی‌اپ رو از داخل تلگرام باز کن تا اطلاعاتت تأیید بشه.');
+        const headers = { Authorization: `tma ${initData}`, ...(options.headers || {}) };
+        if (options.body) headers['Content-Type'] = 'application/json';
+        const response = await fetch(apiBase + path, { ...options, headers });
+        const body = await response.text();
+        let data = {};
+        try { data = body ? JSON.parse(body) : {}; } catch { data.error = body; }
+        if (!response.ok) throw new Error(data.error || 'ارتباط با بات برقرار نشد.');
+        return data;
+      }
+
+      async function loadDashboard() {
+        if (!apiBase) {
+          birthdayText.textContent = 'برای نمایش تولد، API بات باید راه‌اندازی بشه.';
+          document.getElementById('home-birthday').textContent = 'بعد از راه‌اندازی API نمایش داده می‌شه.';
+          friendsList.innerHTML = '<div class="empty-state">بعد از اتصال مینی‌اپ به بات، تولدهای ذخیره‌شده اینجا دیده می‌شن.</div>';
+          setStatus('پروفایل از تلگرام نمایش داده می‌شه؛ اطلاعات تولد بعد از راه‌اندازی API بارگذاری می‌شن.');
+          return;
+        }
+        try {
+          const data = await apiRequest('/api/dashboard');
+          showProfile(data.profile);
+          renderBirthday(data.birthday);
+          renderFriends(data.friends || []);
+          setStatus('');
+        } catch (error) {
+          birthdayText.textContent = 'اطلاعات تولد در دسترس نیست.';
+          document.getElementById('home-birthday').textContent = 'فعلاً اطلاعات تولدت در دسترس نیست.';
+          friendsList.innerHTML = '<div class="empty-state">فعلاً نتونستم فهرست تولدها رو بگیرم.</div>';
+          setStatus(error.message, true);
+        }
+      }
+
+      showProfile(initUser);
+      loadDashboard();
+
+      const monthSelect = document.getElementById('friend-month');
+      const daySelect = document.getElementById('friend-day');
+      function fillMonths(select) {
+        months.forEach((month, index) => {
+          const option = document.createElement('option');
+          option.value = String(index + 1);
+          option.textContent = month;
+          select.append(option);
+        });
+      }
+      function bindDayOptions(monthSelect, daySelect) {
+        function updateDays() {
+          const month = Number(monthSelect.value || 1);
+          const maxDay = month <= 6 ? 31 : 30;
+          const previous = Number(daySelect.value || 1);
+          daySelect.replaceChildren();
+          for (let day = 1; day <= maxDay; day++) {
+            const option = document.createElement('option');
+            option.value = String(day);
+            option.textContent = numberFa.format(day);
+            daySelect.append(option);
+          }
+          daySelect.value = String(Math.min(previous, maxDay));
+        }
+        monthSelect.addEventListener('change', updateDays);
+        updateDays();
+        return updateDays;
+      }
+      fillMonths(monthSelect);
+      const updateDays = bindDayOptions(monthSelect, daySelect);
+      fillMonths(document.getElementById('my-month'));
+      const updateMyDays = bindDayOptions(document.getElementById('my-month'), document.getElementById('my-day'));
+
+      const birthdayForm = document.getElementById('birthday-form');
+      const birthdayStatus = document.getElementById('birthday-status');
+      document.getElementById('edit-birthday-button').addEventListener('click', () => {
+        birthdayForm.hidden = !birthdayForm.hidden;
+        birthdayStatus.textContent = '';
+        birthdayStatus.classList.remove('error');
+      });
+      document.getElementById('cancel-birthday').addEventListener('click', () => {
+        birthdayForm.hidden = true;
+        birthdayStatus.textContent = '';
+        birthdayStatus.classList.remove('error');
+      });
+      birthdayForm.addEventListener('submit', async event => {
+        event.preventDefault();
+        if (!app || typeof app.sendData !== 'function') {
+          birthdayStatus.textContent = 'برای ثبت تاریخ، مینی‌اپ رو از داخل بات باز کن.';
+          birthdayStatus.classList.add('error');
+          return;
+        }
+        const submit = birthdayForm.querySelector('[type="submit"]');
+        submit.disabled = true;
+        birthdayStatus.textContent = 'دارم تاریخ رو ثبت می‌کنم…';
+        birthdayStatus.classList.remove('error');
+        try {
+          const month = Number(document.getElementById('my-month').value);
+          const day = Number(document.getElementById('my-day').value);
+          let year = DateCalendars.toCalendar('persian', DateCalendars.todaySerial()).year;
+          while (year > 1) {
+            try { DateCalendars.fromCalendar('persian', { year, month, day }); break; }
+            catch { year--; }
+          }
+          if (apiBase) {
+            try {
+              await apiRequest('/api/birthday/notification', {
+                method: 'PATCH',
+                body: JSON.stringify({ notification: document.getElementById('my-notification').checked })
+              });
+            } catch (error) {
+              birthdayStatus.textContent = 'تولدت ثبت می‌شه؛ تنظیم یادآوری در دسترس نبود.';
+            }
+          }
+          app.sendData(JSON.stringify({ action: 'save_birthday', calendar: 'solar_hijri', year, month, day }));
+        } catch (error) {
+          birthdayStatus.textContent = error.message || 'ثبت تاریخ انجام نشد.';
+          birthdayStatus.classList.add('error');
+          submit.disabled = false;
+        }
+      });
+
+      document.getElementById('add-friend-button').addEventListener('click', () => {
+        form.hidden = !form.hidden;
+        formStatus.textContent = '';
+        formStatus.classList.remove('error');
+        if (!form.hidden) document.getElementById('friend-name').focus();
+      });
+      document.getElementById('cancel-friend').addEventListener('click', () => {
+        form.reset();
+        form.hidden = true;
+        formStatus.textContent = '';
+        formStatus.classList.remove('error');
+      });
+      form.addEventListener('submit', async event => {
+        event.preventDefault();
+        const submit = form.querySelector('[type="submit"]');
+        submit.disabled = true;
+        formStatus.textContent = 'دارم ثبتش می‌کنم…';
+        try {
+          await apiRequest('/api/friends', {
+            method: 'POST',
+            body: JSON.stringify({
+              name: document.getElementById('friend-name').value,
+              month: Number(monthSelect.value),
+              day: Number(daySelect.value),
+              notification: document.getElementById('friend-notification').checked
+            })
+          });
+          form.reset();
+          updateDays();
+          form.hidden = true;
+          await loadDashboard();
+        } catch (error) {
+          formStatus.textContent = error.message;
+          formStatus.classList.add('error');
+        } finally {
+          submit.disabled = false;
+        }
+      });
+      friendsList.addEventListener('click', async event => {
+        const toggle = event.target.closest('[data-toggle-friend]');
+        if (toggle) {
+          toggle.disabled = true;
+          try {
+            await apiRequest('/api/friends/' + encodeURIComponent(toggle.dataset.toggleFriend), {
+              method: 'PATCH',
+              body: JSON.stringify({ notification: toggle.dataset.notification !== '1' })
+            });
+            await loadDashboard();
+          } catch (error) {
+            setStatus(error.message, true);
+            toggle.disabled = false;
+          }
+          return;
+        }
+        const remove = event.target.closest('[data-delete-friend]');
+        if (!remove) return;
+        const accepted = app && app.showConfirm
+          ? await new Promise(resolve => app.showConfirm('این تولد از فهرستت حذف بشه؟', resolve))
+          : window.confirm('این تولد از فهرستت حذف بشه؟');
+        if (!accepted) return;
+        remove.disabled = true;
+        try {
+          await apiRequest('/api/friends/' + encodeURIComponent(remove.dataset.deleteFriend), { method: 'DELETE' });
+          await loadDashboard();
+        } catch (error) {
+          setStatus(error.message, true);
+          remove.disabled = false;
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
