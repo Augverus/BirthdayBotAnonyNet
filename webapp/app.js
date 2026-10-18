@@ -15,12 +15,8 @@
   const apiBase=String(window.BOT_API_URL||window.location.origin).replace(/\/+$/,'');
   const initData=telegram&&telegram.initData;
   const canSave=!!(initData||(telegram&&typeof telegram.sendData==='function'));
-  let birthdayExists=document.body.dataset.birthdayExists==='true';
   let dateTouched=false;
-  function updateSaveLabel(){save.textContent=birthdayExists?'ویرایش تاریخ تولدم':'ثبت تاریخ تولدم';}
   function applySavedBirthday(birthday){
-    birthdayExists=!!birthday;
-    updateSaveLabel();
     if(!birthday||dateTouched)return;
     let year=DateCalendars.toCalendar('persian',today).year;
     while(year>1){
@@ -35,7 +31,6 @@
       year--;
     }
   }
-  updateSaveLabel();
   window.addEventListener('birthday-state',event=>applySavedBirthday(event.detail&&event.detail.birthday));
   save.disabled=!canSave;
   if(canSave)saveHint.textContent='سال برای بررسی تاریخ استفاده می‌شه و فقط ماه و روز ذخیره می‌شن.';
@@ -69,7 +64,8 @@
       menu.append(button);
     }
     menu.hidden=false;
-    menu.querySelector('[aria-selected="true"]')?.scrollIntoView({block:'nearest'});
+    const active=menu.querySelector('[aria-selected="true"]');
+    if(active)menu.scrollTop=Math.max(0,active.offsetTop-(menu.clientHeight-active.offsetHeight)/2);
   }
   function openDateOptions(field){
     if(!$(field+'-options').hidden){closeMenus();return;}
@@ -87,17 +83,20 @@
     const menu=$(field+'-options'),trigger=$(field+'-trigger');
     fillOptions(menu,options,selected,'date');trigger.setAttribute('aria-expanded','true');
   }
-  $('date-fields').addEventListener('click',event=>{
-    const trigger=event.target.closest('.date-field-trigger');
-    if(trigger){openDateOptions(trigger.id.replace('-trigger',''));return;}
-    const option=event.target.closest('.date-option');
-    if(!option)return;
-    const menu=option.parentElement,field=menu.id.replace('-options',''),value=Number(option.dataset.value);
+  function chooseDateOption(field,option){
+    const value=Number(option.dataset.value);
     const next={...dateParts,[field]:value};
     const days=validDays(next.year,next.month);
     if(!days.includes(next.day))next.day=Math.min(next.day,days[days.length-1]);
     dateTouched=true;closeMenus();setDate(next);
-  });
+  }
+  for(const field of ['year','month','day']){
+    $(field+'-trigger').addEventListener('click',()=>openDateOptions(field));
+    $(field+'-options').addEventListener('click',event=>{
+      const option=event.target.closest('.date-option');
+      if(option)chooseDateOption(field,option);
+    });
+  }
   $('calendar-trigger').addEventListener('click',()=>{
     if(!$('calendar-options').hidden){closeMenus();return;}
     closeMenus();const menu=$('calendar-options');
@@ -147,12 +146,12 @@
         try{body=responseText?JSON.parse(responseText):{};}catch{throw new Error(responseText||'پاسخ API قابل خواندن نیست؛ اتصال بات را بررسی کن.');}
         if(!response.ok)throw new Error(body.error||'ثبت انجام نشد.');
         saveHint.textContent='تاریخ تولدت ذخیره شد.';
-        birthdayExists=true;updateSaveLabel();
+        save.textContent='ثبت تاریخ تولدم';
         save.disabled=false;
         window.dispatchEvent(new CustomEvent('birthday-saved'));
       }else{
         telegram.sendData(JSON.stringify({action:'save_birthday',calendar:'solar_hijri',year:p.year,month:p.month,day:p.day}));
-        birthdayExists=true;updateSaveLabel();
+        save.textContent='ثبت تاریخ تولدم';
       }
     }catch(error){saveHint.textContent=error.message||'ثبت انجام نشد. صفحه رو از داخل بات باز کن و دوباره تلاش کن.';save.disabled=false;}
   });

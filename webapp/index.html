@@ -7,8 +7,8 @@
   <title>تولد عزیزان | مینی‌اپ</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="./api-config.js"></script>
-  <script src="./calendar.js?v=20261018-4"></script>
-  <script defer src="./app.js?v=20261018-4"></script>
+  <script src="./calendar.js?v=20261018-5"></script>
+  <script defer src="./app.js?v=20261018-5"></script>
   <style>
     :root { color-scheme: dark; --bg: #080a0b; --fg: #f4f5f7; --muted: #929b9f; --card: #121719; --accent: #e6bd63; --accent-dark: #f4d98f; --accentText: #17130b; --line: #283033; }
     * { box-sizing: border-box; }
@@ -52,14 +52,11 @@
     input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 4px #e6bd6325; }
     .calendar-picker, .date-fields { display: grid; gap: 9px; }
     .calendar-picker { position: relative; }
-    .calendar-trigger, .date-field-trigger { display: flex; align-items: center; justify-content: space-between; gap: 7px; width: 100%; min-width: 0; min-height: 50px; padding: 9px 12px; border: 1px solid #30383b; border-radius: 15px; background: linear-gradient(145deg, #151a1c, #0d1112); color: var(--fg); text-align: right; font: inherit; font-weight: 750; }
-    .calendar-trigger { border-color: #70572888; color: var(--accent-dark); }
+    .calendar-trigger, .date-field-trigger { display: flex; align-items: center; justify-content: space-between; gap: 7px; width: 100%; min-width: 0; min-height: 50px; padding: 9px 12px; border: 1px solid #70572888; border-radius: 999px; background: linear-gradient(145deg, #201b11, #171512); color: var(--accent-dark); text-align: right; font: inherit; font-weight: 750; box-shadow: 0 6px 18px #0004; }
     .calendar-trigger::after, .date-field-trigger::after { content: "⌄"; flex: 0 0 auto; color: var(--accent-dark); font-size: 1.15rem; line-height: 1; }
     .date-fields { grid-template-columns: .9fr 1.35fr .8fr; direction: ltr; }
     .date-field { position: relative; min-width: 0; direction: rtl; }
     .date-field label { font-size: .84rem; }
-    .date-field-trigger { justify-content: center; min-height: 52px; padding-inline: 5px; border-radius: 15px; font-size: .9rem; }
-    .date-field-trigger::after { display: none; }
     .date-options, .calendar-options { position: absolute; z-index: 35; top: calc(100% + 6px); right: 0; left: 0; max-height: min(270px, 42vh); overflow-y: auto; padding: 5px; border: 1px solid #5b4828; border-radius: 15px; background: rgba(18, 23, 25, .97); box-shadow: 0 12px 30px #000a; backdrop-filter: blur(16px); scrollbar-width: thin; scrollbar-color: #705728 #121719; }
     .date-option, .calendar-option { display: block; width: 100%; min-height: 42px; padding: 8px 10px; border: 0; border-radius: 10px; background: transparent; color: var(--fg); text-align: center; font: inherit; font-size: .92rem; }
     .date-option[aria-selected="true"], .calendar-option[aria-selected="true"] { background: linear-gradient(135deg, #e6bd6330, #c4933525); color: var(--accent-dark); font-weight: 850; }
@@ -110,7 +107,7 @@
     .nav-button[aria-current="page"] { border-color: #7b633888; color: var(--accent-dark); background: #201b11; }
     .nav-button:active { transform: scale(.97); }
     @keyframes screen-in { from { opacity: .55; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-    @media (max-width: 360px) { .date-fields { grid-template-columns: .82fr 1.3fr .68fr; gap: 6px; } .date-field-trigger { font-size: .82rem; } }
+    @media (max-width: 360px) { .date-fields { grid-template-columns: .82fr 1.3fr .68fr; gap: 6px; } .date-field-trigger { gap: 2px; padding-inline: 5px; font-size: .8rem; } .date-field-trigger::after { font-size: .95rem; } }
     @media (prefers-reduced-motion: reduce) { .screen { animation: none; } }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; } }
   </style>
@@ -148,19 +145,6 @@
         <div><strong><svg class="visual-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14v9H5zM3 12h18M12 12v9M12 12c-4 0-5-2-5-4 3 0 5 1 5 4zm0 0c0-3 2-5 5-5 0 3-2 5-5 5z"/></svg> تولد من</strong><span id="my-birthday">در حال بارگذاری…</span></div>
         <div class="countdown" id="my-countdown"></div>
       </div>
-      <button class="secondary" id="edit-birthday-button" type="button" style="margin-top: 12px">✏️ ویرایش تاریخ تولدم</button>
-      <form class="friend-form" id="birthday-form" hidden>
-        <div class="form-grid">
-          <div><label for="my-month">ماه تولد</label><select id="my-month" name="month" required></select></div>
-          <div><label for="my-day">روز تولد</label><select id="my-day" name="day" required></select></div>
-        </div>
-        <label class="check-row"><input id="my-notification" type="checkbox" checked> روز تولدم یادآوری بشه</label>
-        <div class="form-actions">
-          <button class="primary" type="submit">ذخیره تولد</button>
-          <button class="secondary" id="cancel-birthday" type="button">بی‌خیال</button>
-        </div>
-        <div class="status" id="birthday-status" aria-live="polite"></div>
-      </form>
       <div class="status" id="api-status" aria-live="polite"></div>
     </section>
 
@@ -336,16 +320,13 @@
       }
 
       function renderBirthday(birthday) {
-        const editButton = document.getElementById('edit-birthday-button');
         window.currentBirthday = birthday || null;
-        document.body.dataset.birthdayExists = String(Boolean(birthday));
         window.dispatchEvent(new CustomEvent('birthday-state', { detail: { birthday } }));
         if (!birthday) {
           birthdayText.textContent = 'تولدت هنوز توی بات ثبت نشده.';
           countdownText.textContent = '';
           document.getElementById('home-birthday').textContent = 'تولدت هنوز ثبت نشده.';
           document.getElementById('home-countdown').textContent = '';
-          editButton.textContent = '🎂 ثبت تاریخ تولدم';
           return;
         }
         birthdayText.textContent = `${numberFa.format(birthday.day)} ${months[birthday.month - 1]}`;
@@ -354,13 +335,6 @@
         else countdownText.textContent = `${numberFa.format(birthday.days_remaining)} روز مونده`;
         const homeCountdown = document.getElementById('home-countdown');
         homeCountdown.replaceChildren(...Array.from(countdownText.childNodes, node => node.cloneNode(true)));
-        editButton.textContent = '✏️ ویرایش تاریخ تولدم';
-        const monthSelect = document.getElementById('my-month');
-        const daySelect = document.getElementById('my-day');
-        monthSelect.value = String(birthday.month);
-        updateMyDays();
-        daySelect.value = String(birthday.day);
-        document.getElementById('my-notification').checked = birthday.notification !== false;
       }
 
       function renderFriends(friends) {
@@ -481,59 +455,6 @@
       }
       fillMonths(monthSelect);
       const updateDays = bindDayOptions(monthSelect, daySelect);
-      fillMonths(document.getElementById('my-month'));
-      const updateMyDays = bindDayOptions(document.getElementById('my-month'), document.getElementById('my-day'));
-
-      const birthdayForm = document.getElementById('birthday-form');
-      const birthdayStatus = document.getElementById('birthday-status');
-      document.getElementById('edit-birthday-button').addEventListener('click', () => {
-        birthdayForm.hidden = !birthdayForm.hidden;
-        birthdayStatus.textContent = '';
-        birthdayStatus.classList.remove('error');
-      });
-      document.getElementById('cancel-birthday').addEventListener('click', () => {
-        birthdayForm.hidden = true;
-        birthdayStatus.textContent = '';
-        birthdayStatus.classList.remove('error');
-      });
-      birthdayForm.addEventListener('submit', async event => {
-        event.preventDefault();
-        if (!app || (!initData && typeof app.sendData !== 'function')) {
-          birthdayStatus.textContent = 'برای ثبت تاریخ، مینی‌اپ رو از داخل بات باز کن.';
-          birthdayStatus.classList.add('error');
-          return;
-        }
-        const submit = birthdayForm.querySelector('[type="submit"]');
-        submit.disabled = true;
-        birthdayStatus.textContent = 'دارم تاریخ رو ثبت می‌کنم…';
-        birthdayStatus.classList.remove('error');
-        try {
-          const month = Number(document.getElementById('my-month').value);
-          const day = Number(document.getElementById('my-day').value);
-          let year = DateCalendars.toCalendar('persian', DateCalendars.todaySerial()).year;
-          while (year > 1) {
-            try { DateCalendars.fromCalendar('persian', { year, month, day }); break; }
-            catch { year--; }
-          }
-          const notification = document.getElementById('my-notification').checked;
-          if (initData) {
-            await apiRequest('/api/birthday', {
-              method: 'POST',
-              body: JSON.stringify({ calendar: 'solar_hijri', year, month, day, notification })
-            });
-            await loadDashboard();
-            birthdayForm.hidden = true;
-            birthdayStatus.textContent = 'تاریخ تولدت ذخیره شد.';
-          } else {
-            app.sendData(JSON.stringify({ action: 'save_birthday', calendar: 'solar_hijri', year, month, day }));
-          }
-        } catch (error) {
-          birthdayStatus.textContent = error.message || 'ثبت تاریخ انجام نشد.';
-          birthdayStatus.classList.add('error');
-          submit.disabled = false;
-        }
-      });
-
       document.getElementById('add-friend-button').addEventListener('click', () => {
         form.hidden = !form.hidden;
         formStatus.textContent = '';
