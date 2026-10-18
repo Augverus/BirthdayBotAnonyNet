@@ -7,8 +7,8 @@
   <title>تولد عزیزان | مینی‌اپ</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="./api-config.js"></script>
-  <script src="./calendar.js"></script>
-  <script defer src="./app.js"></script>
+  <script src="./calendar.js?v=20261018-3"></script>
+  <script defer src="./app.js?v=20261018-3"></script>
   <style>
     :root { color-scheme: dark; --bg: #080a0b; --fg: #f4f5f7; --muted: #929b9f; --card: #121719; --accent: #e6bd63; --accent-dark: #f4d98f; --accentText: #17130b; --line: #283033; }
     * { box-sizing: border-box; }
@@ -46,20 +46,22 @@
     .tab:active, .primary:active, .secondary:active { transform: scale(.98); }
     label { display: block; margin-bottom: 7px; color: #e4e7e8; font-weight: 700; }
     input, select { width: 100%; min-height: 48px; padding: 11px 13px; border: 1px solid #30383b; border-radius: 14px; color: var(--fg); background: #090c0d; outline: none; color-scheme: dark; transition: border-color .18s ease, box-shadow .18s ease; }
+    select option { color: var(--fg); background: #101415; }
     input[type="date"] { direction: ltr; text-align: center; }
     input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 4px #e6bd6325; }
-    .date-picker-trigger { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 52px; padding: 11px 14px; border: 1px solid #70572888; border-radius: 15px; background: #0c0f10; color: var(--accent-dark); text-align: right; font: inherit; font-weight: 750; }
+    .date-picker-trigger { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 52px; padding: 11px 14px; border: 1px solid #7b633888; border-radius: 999px; background: linear-gradient(145deg,#201b11,#171512); color: var(--accent-dark); text-align: right; font: inherit; font-weight: 750; box-shadow: 0 6px 18px #0004; }
     .date-picker-trigger::after { content: "▾"; color: var(--accent); }
-    .date-picker-overlay { position: fixed; z-index: 100; inset: 0; display: grid; align-items: end; justify-items: center; padding: 14px 12px max(14px, env(safe-area-inset-bottom)); background: rgba(0, 0, 0, .72); backdrop-filter: blur(5px); }
-    .date-picker-sheet { width: min(100%, 460px); padding: 18px; border: 1px solid #e6bd6380; border-radius: 24px; background: rgba(18, 23, 25, .3); color: var(--fg); box-shadow: 0 18px 55px #000a; backdrop-filter: blur(24px) saturate(150%); -webkit-backdrop-filter: blur(24px) saturate(150%); }
+    .date-picker-overlay { position: fixed; z-index: 100; inset: 0; display: grid; align-items: center; justify-items: center; padding: 16px 12px max(16px, env(safe-area-inset-bottom)); background: rgba(0, 0, 0, .76); backdrop-filter: blur(7px); }
+    .date-picker-overlay[hidden] { display: none; }
+    .date-picker-sheet { width: min(100%, 460px); padding: 19px; border: 1px solid #30383b; border-radius: 24px; background: linear-gradient(145deg, #151a1c, #101415); color: var(--fg); box-shadow: 0 12px 34px #0008; }
     .date-picker-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 3px; }
     .date-picker-head h3 { margin: 0; color: var(--accent-dark); font-size: 1.05rem; }
     .picker-close { display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid #e6bd6355; border-radius: 50%; background: #171b18aa; color: var(--accent-dark); font-size: 1.35rem; }
     .picker-caption { margin: 0 0 14px; color: var(--muted); font-size: .82rem; }
-    .date-wheel { position: relative; display: grid; grid-template-columns: .8fr 1.35fr .8fr; gap: 8px; direction: rtl; }
-    .date-wheel::after { position: absolute; z-index: 0; top: 88px; right: 0; left: 0; height: 44px; border: 1px solid #e6bd6355; border-radius: 13px; background: rgba(230, 189, 99, .12); content: ""; pointer-events: none; }
-    .wheel-column { position: relative; z-index: 1; min-width: 0; text-align: center; }
-    .wheel-label { display: block; margin-bottom: 5px; color: var(--muted); font-size: .75rem; }
+    .date-wheel { position: relative; display: grid; grid-template-columns: .9fr 1.35fr .8fr; gap: 8px; direction: ltr; }
+    .date-wheel::after { position: absolute; z-index: 0; top: 109px; right: 0; left: 0; height: 44px; border: 1px solid #e6bd6355; border-radius: 13px; background: rgba(230, 189, 99, .1); content: ""; pointer-events: none; }
+    .wheel-column { position: relative; z-index: 1; min-width: 0; text-align: center; direction: rtl; }
+    .wheel-label { display: block; margin-bottom: 5px; color: var(--muted); font-size: .78rem; font-weight: 700; }
     .wheel-scroll { height: 220px; overflow-y: auto; overscroll-behavior: contain; padding-block: 88px; scrollbar-width: none; scroll-snap-type: y mandatory; -webkit-overflow-scrolling: touch; }
     .wheel-scroll::-webkit-scrollbar { display: none; }
     .wheel-option { display: block; width: 100%; height: 44px; padding: 0 3px; overflow: hidden; border: 0; border-radius: 11px; background: transparent; color: #d4d0c6; font: inherit; font-size: .93rem; font-weight: 650; white-space: nowrap; text-overflow: ellipsis; scroll-snap-align: center; }
@@ -229,9 +231,9 @@
       <header class="date-picker-head"><h3 id="date-picker-title">انتخاب تاریخ</h3><button id="picker-close" class="picker-close" type="button" aria-label="بستن">×</button></header>
       <p id="picker-caption" class="picker-caption">روز، ماه و سال رو انتخاب کن</p>
       <div class="date-wheel">
-        <div class="wheel-column"><span class="wheel-label">روز</span><div id="day-wheel" class="wheel-scroll" role="listbox" aria-label="روز"></div></div>
-        <div class="wheel-column"><span class="wheel-label">ماه</span><div id="month-wheel" class="wheel-scroll" role="listbox" aria-label="ماه"></div></div>
-        <div class="wheel-column"><span class="wheel-label">سال</span><div id="year-wheel" class="wheel-scroll" role="listbox" aria-label="سال"></div></div>
+            <div class="wheel-column"><span class="wheel-label">سال</span><div id="year-wheel" class="wheel-scroll" role="listbox" aria-label="سال"></div></div>
+            <div class="wheel-column"><span class="wheel-label">ماه</span><div id="month-wheel" class="wheel-scroll" role="listbox" aria-label="ماه"></div></div>
+            <div class="wheel-column"><span class="wheel-label">روز</span><div id="day-wheel" class="wheel-scroll" role="listbox" aria-label="روز"></div></div>
       </div>
       <div class="picker-actions"><button id="picker-cancel" class="secondary" type="button">بی‌خیال</button><button id="picker-confirm" class="primary" type="button">تأیید تاریخ</button></div>
     </section>
@@ -341,6 +343,9 @@
 
       function renderBirthday(birthday) {
         const editButton = document.getElementById('edit-birthday-button');
+        window.currentBirthday = birthday || null;
+        document.body.dataset.birthdayExists = String(Boolean(birthday));
+        window.dispatchEvent(new CustomEvent('birthday-state', { detail: { birthday } }));
         if (!birthday) {
           birthdayText.textContent = 'تولدت هنوز توی بات ثبت نشده.';
           countdownText.textContent = '';
@@ -449,6 +454,7 @@
       }
 
       showProfile(initUser);
+      window.addEventListener('birthday-saved', () => loadDashboard());
       loadDashboard();
 
       const monthSelect = document.getElementById('friend-month');
