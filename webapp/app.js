@@ -10,7 +10,7 @@
   const numberFa=new Intl.NumberFormat('fa-IR',{useGrouping:false});
   const telegram=window.Telegram&&window.Telegram.WebApp;
   if(telegram){telegram.ready();telegram.expand();}
-  const today=new DateCalendars.todaySerial();
+  const today=DateCalendars.todaySerial();
   let dateParts=null;
   const apiBase=String(window.BOT_API_URL||window.location.origin).replace(/\/+$/,'');
   const initData=telegram&&telegram.initData;
