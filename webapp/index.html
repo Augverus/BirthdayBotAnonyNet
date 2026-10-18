@@ -7,8 +7,8 @@
   <title>تولد عزیزان | مینی‌اپ</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="./api-config.js"></script>
-  <script src="./calendar.js?v=20261018-3"></script>
-  <script defer src="./app.js?v=20261018-3"></script>
+  <script src="./calendar.js?v=20261018-4"></script>
+  <script defer src="./app.js?v=20261018-4"></script>
   <style>
     :root { color-scheme: dark; --bg: #080a0b; --fg: #f4f5f7; --muted: #929b9f; --card: #121719; --accent: #e6bd63; --accent-dark: #f4d98f; --accentText: #17130b; --line: #283033; }
     * { box-sizing: border-box; }
@@ -41,6 +41,7 @@
     .section-heading p { margin: 3px 0 0; color: var(--muted); font-size: .88rem; }
     .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; padding: 5px; border: 1px solid #252c2f; border-radius: 19px; background: #0c1011; margin-bottom: 15px; }
     button, input, select { font: inherit; }
+    .field-label { display: block; margin-bottom: 7px; color: #e4e7e8; font-weight: 700; }
     .tab { border: 0; border-radius: 15px; padding: 11px 6px; color: #a0a9ac; background: transparent; font-size: .88rem; font-weight: 700; transition: background .18s ease, color .18s ease, transform .18s ease; }
     .tab.active { background: linear-gradient(135deg, #e6bd63, #c49335); color: var(--accentText); box-shadow: 0 4px 18px #d4a4444d; }
     .tab:active, .primary:active, .secondary:active { transform: scale(.98); }
@@ -49,25 +50,21 @@
     select option { color: var(--fg); background: #101415; }
     input[type="date"] { direction: ltr; text-align: center; }
     input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 4px #e6bd6325; }
-    .date-picker-trigger { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 52px; padding: 11px 14px; border: 1px solid #7b633888; border-radius: 999px; background: linear-gradient(145deg,#201b11,#171512); color: var(--accent-dark); text-align: right; font: inherit; font-weight: 750; box-shadow: 0 6px 18px #0004; }
-    .date-picker-trigger::after { content: "▾"; color: var(--accent); }
-    .date-picker-overlay { position: fixed; z-index: 100; inset: 0; display: grid; align-items: center; justify-items: center; padding: 16px 12px max(16px, env(safe-area-inset-bottom)); background: rgba(0, 0, 0, .76); backdrop-filter: blur(7px); }
-    .date-picker-overlay[hidden] { display: none; }
-    .date-picker-sheet { width: min(100%, 460px); padding: 19px; border: 1px solid #30383b; border-radius: 24px; background: linear-gradient(145deg, #151a1c, #101415); color: var(--fg); box-shadow: 0 12px 34px #0008; }
-    .date-picker-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 3px; }
-    .date-picker-head h3 { margin: 0; color: var(--accent-dark); font-size: 1.05rem; }
-    .picker-close { display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid #e6bd6355; border-radius: 50%; background: #171b18aa; color: var(--accent-dark); font-size: 1.35rem; }
-    .picker-caption { margin: 0 0 14px; color: var(--muted); font-size: .82rem; }
-    .date-wheel { position: relative; display: grid; grid-template-columns: .9fr 1.35fr .8fr; gap: 8px; direction: ltr; }
-    .date-wheel::after { position: absolute; z-index: 0; top: 109px; right: 0; left: 0; height: 44px; border: 1px solid #e6bd6355; border-radius: 13px; background: rgba(230, 189, 99, .1); content: ""; pointer-events: none; }
-    .wheel-column { position: relative; z-index: 1; min-width: 0; text-align: center; direction: rtl; }
-    .wheel-label { display: block; margin-bottom: 5px; color: var(--muted); font-size: .78rem; font-weight: 700; }
-    .wheel-scroll { height: 220px; overflow-y: auto; overscroll-behavior: contain; padding-block: 88px; scrollbar-width: none; scroll-snap-type: y mandatory; -webkit-overflow-scrolling: touch; }
-    .wheel-scroll::-webkit-scrollbar { display: none; }
-    .wheel-option { display: block; width: 100%; height: 44px; padding: 0 3px; overflow: hidden; border: 0; border-radius: 11px; background: transparent; color: #d4d0c6; font: inherit; font-size: .93rem; font-weight: 650; white-space: nowrap; text-overflow: ellipsis; scroll-snap-align: center; }
-    .wheel-option[aria-selected="true"] { color: var(--accent-dark); font-size: 1rem; font-weight: 850; }
-    .picker-actions { display: grid; grid-template-columns: 1fr 1.35fr; gap: 9px; margin-top: 14px; }
-    .picker-actions .primary, .picker-actions .secondary { min-height: 46px; margin: 0; padding: 9px 12px; }
+    .calendar-picker, .date-fields { display: grid; gap: 9px; }
+    .calendar-picker { position: relative; }
+    .calendar-trigger, .date-field-trigger { display: flex; align-items: center; justify-content: space-between; gap: 7px; width: 100%; min-width: 0; min-height: 50px; padding: 9px 12px; border: 1px solid #30383b; border-radius: 15px; background: linear-gradient(145deg, #151a1c, #0d1112); color: var(--fg); text-align: right; font: inherit; font-weight: 750; }
+    .calendar-trigger { border-color: #70572888; color: var(--accent-dark); }
+    .calendar-trigger::after, .date-field-trigger::after { content: "⌄"; flex: 0 0 auto; color: var(--accent-dark); font-size: 1.15rem; line-height: 1; }
+    .date-fields { grid-template-columns: .9fr 1.35fr .8fr; direction: ltr; }
+    .date-field { position: relative; min-width: 0; direction: rtl; }
+    .date-field label { font-size: .84rem; }
+    .date-field-trigger { justify-content: center; min-height: 52px; padding-inline: 5px; border-radius: 15px; font-size: .9rem; }
+    .date-field-trigger::after { display: none; }
+    .date-options, .calendar-options { position: absolute; z-index: 35; top: calc(100% + 6px); right: 0; left: 0; max-height: min(270px, 42vh); overflow-y: auto; padding: 5px; border: 1px solid #5b4828; border-radius: 15px; background: rgba(18, 23, 25, .97); box-shadow: 0 12px 30px #000a; backdrop-filter: blur(16px); scrollbar-width: thin; scrollbar-color: #705728 #121719; }
+    .date-option, .calendar-option { display: block; width: 100%; min-height: 42px; padding: 8px 10px; border: 0; border-radius: 10px; background: transparent; color: var(--fg); text-align: center; font: inherit; font-size: .92rem; }
+    .date-option[aria-selected="true"], .calendar-option[aria-selected="true"] { background: linear-gradient(135deg, #e6bd6330, #c4933525); color: var(--accent-dark); font-weight: 850; }
+    .date-option:active, .calendar-option:active { background: #e6bd6340; }
+    .calendar-trigger:focus-visible, .date-field-trigger:focus-visible, .date-option:focus-visible, .calendar-option:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .primary, .secondary, .delete-friend { border-radius: 999px; font-weight: 800; transition: transform .18s ease, box-shadow .18s ease; }
     .primary { width: 100%; min-height: 52px; border: 0; padding: 12px 16px; background: linear-gradient(135deg, #e6bd63, #c49335); color: #17130b; box-shadow: 0 7px 22px #d4a4444d; }
     .primary:hover { box-shadow: 0 9px 28px #f4d98f66; }
@@ -113,6 +110,7 @@
     .nav-button[aria-current="page"] { border-color: #7b633888; color: var(--accent-dark); background: #201b11; }
     .nav-button:active { transform: scale(.97); }
     @keyframes screen-in { from { opacity: .55; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    @media (max-width: 360px) { .date-fields { grid-template-columns: .82fr 1.3fr .68fr; gap: 6px; } .date-field-trigger { font-size: .82rem; } }
     @media (prefers-reduced-motion: reduce) { .screen { animation: none; } }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; } }
   </style>
@@ -174,15 +172,23 @@
           <h2 id="converter-title">تبدیل تاریخ</h2>
           <p>تاریخ رو یک‌بار وارد کن و معادلش رو در سه تقویم ببین.</p>
         </header>
-        <label for="calendar">تقویم ورودی</label>
-        <select id="calendar">
-          <option value="persian">شمسی</option>
-          <option value="gregory">میلادی</option>
-          <option value="islamic-umalqura">قمری ام‌القری</option>
-        </select>
-        <label for="date-picker-trigger">تاریخ</label>
+        <span class="field-label" id="calendar-label">تقویم ورودی</span>
+        <div class="calendar-picker">
+          <input id="calendar" type="hidden" value="persian">
+          <button id="calendar-trigger" class="calendar-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="calendar-label calendar-current"><span id="calendar-current">شمسی</span></button>
+          <div id="calendar-options" class="calendar-options" role="listbox" aria-labelledby="calendar-label" hidden>
+            <button class="calendar-option" type="button" role="option" data-calendar="persian" aria-selected="true">شمسی</button>
+            <button class="calendar-option" type="button" role="option" data-calendar="gregory" aria-selected="false">میلادی</button>
+            <button class="calendar-option" type="button" role="option" data-calendar="islamic-umalqura" aria-selected="false">قمری ام‌القری</button>
+          </div>
+        </div>
+        <span class="field-label" id="date-label">تاریخ</span>
         <input id="date" type="hidden">
-        <button id="date-picker-trigger" class="date-picker-trigger" type="button" aria-haspopup="dialog" aria-expanded="false" aria-describedby="date-hint">انتخاب تاریخ</button>
+        <div class="date-fields" id="date-fields">
+          <div class="date-field"><label for="year-trigger">سال</label><button id="year-trigger" class="date-field-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">—</button><div id="year-options" class="date-options" role="listbox" aria-label="سال" hidden></div></div>
+          <div class="date-field"><label for="month-trigger">ماه</label><button id="month-trigger" class="date-field-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">—</button><div id="month-options" class="date-options" role="listbox" aria-label="ماه" hidden></div></div>
+          <div class="date-field"><label for="day-trigger">روز</label><button id="day-trigger" class="date-field-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">—</button><div id="day-options" class="date-options" role="listbox" aria-label="روز" hidden></div></div>
+        </div>
         <p class="status" id="date-hint">با تغییر تاریخ یا تقویم، نتیجه همون لحظه به‌روز می‌شه.</p>
         <button id="today" class="secondary" type="button">امروز</button>
         <p id="error" class="status error" role="alert" hidden></p>
@@ -226,18 +232,6 @@
     <p class="foot"><svg class="visual-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3m-4 4v3"/></svg> اطلاعات تولد فقط برای حساب خودت نمایش داده می‌شه.</p>
     </section>
   </main>
-  <div id="date-picker-overlay" class="date-picker-overlay" hidden>
-    <section class="date-picker-sheet" role="dialog" aria-modal="true" aria-labelledby="date-picker-title">
-      <header class="date-picker-head"><h3 id="date-picker-title">انتخاب تاریخ</h3><button id="picker-close" class="picker-close" type="button" aria-label="بستن">×</button></header>
-      <p id="picker-caption" class="picker-caption">روز، ماه و سال رو انتخاب کن</p>
-      <div class="date-wheel">
-            <div class="wheel-column"><span class="wheel-label">سال</span><div id="year-wheel" class="wheel-scroll" role="listbox" aria-label="سال"></div></div>
-            <div class="wheel-column"><span class="wheel-label">ماه</span><div id="month-wheel" class="wheel-scroll" role="listbox" aria-label="ماه"></div></div>
-            <div class="wheel-column"><span class="wheel-label">روز</span><div id="day-wheel" class="wheel-scroll" role="listbox" aria-label="روز"></div></div>
-      </div>
-      <div class="picker-actions"><button id="picker-cancel" class="secondary" type="button">بی‌خیال</button><button id="picker-confirm" class="primary" type="button">تأیید تاریخ</button></div>
-    </section>
-  </div>
   <nav class="bottom-nav" aria-label="منوی اصلی">
     <button class="nav-button" type="button" data-tab="home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg><span>خانه</span></button>
     <button class="nav-button" type="button" data-tab="converter" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg><span>تبدیل</span></button>

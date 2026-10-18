@@ -1,18 +1,17 @@
 (() => {
   'use strict';
   const $=id=>document.getElementById(id),calendar=$('calendar'),input=$('date'),error=$('error'),save=$('save'),saveHint=$('save-hint');
-  const picker=$('date-picker-overlay'),pickerTrigger=$('date-picker-trigger');
   const monthNames={
     persian:['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'],
-    gregory:['ژانویه','فوریه','مارس','آوریل','مه','ژوئن','ژوئیه','اوت','سپتامبر','اکتبر','نوامبر','دسامبر'],
-    'islamic-umalqura':['محرم','صفر','ربیع‌الاول','ربیع‌الثانی','جمادی‌الاول','جمادی‌الثانی','رجب','شعبان','رمضان','شوال','ذی‌القعده','ذی‌الحجه']
+    gregory:['ژانویه','فوریه','مارس','آوریل','مه','ژوئن','جولای','آگوست','سپتامبر','اکتبر','نوامبر','دسامبر'],
+    'islamic-umalqura':['محرّم','صفر','ربيع الأول','ربيع الآخر','جمادى الأولى','جمادى الآخرة','رجب','شعبان','رمضان','شوّال','ذو القعدة','ذو الحجة']
   };
+  const calendarNames={persian:'شمسی',gregory:'میلادی','islamic-umalqura':'قمری ام‌القری'};
   const numberFa=new Intl.NumberFormat('fa-IR',{useGrouping:false});
-  const wheelRowHeight=44;
   const telegram=window.Telegram&&window.Telegram.WebApp;
   if(telegram){telegram.ready();telegram.expand();}
   const today=new DateCalendars.todaySerial();
-  let activeCalendar=calendar.value;
+  let dateParts=null;
   const apiBase=String(window.BOT_API_URL||window.location.origin).replace(/\/+$/,'');
   const initData=telegram&&telegram.initData;
   const canSave=!!(initData||(telegram&&typeof telegram.sendData==='function'));
@@ -29,9 +28,7 @@
         const serial=DateCalendars.fromCalendar('persian',{year,month:birthday.month,day:birthday.day});
         if(serial<=today){
           const selected=DateCalendars.toCalendar(calendar.value,serial);
-          input.value=DateCalendars.formatDate(selected);
-          updateDateLabel(selected);
-          render();
+          setDate(selected);
           return;
         }
       }catch{}
@@ -43,8 +40,14 @@
   save.disabled=!canSave;
   if(canSave)saveHint.textContent='سال برای بررسی تاریخ استفاده می‌شه و فقط ماه و روز ذخیره می‌شن.';
   function todayParts(){return DateCalendars.toCalendar(calendar.value,today);}
-  function updateDateLabel(date){pickerTrigger.textContent=date?`${numberFa.format(date.day)} ${monthNames[calendar.value][date.month-1]} ${numberFa.format(date.year)}`:'انتخاب تاریخ';}
-  let pickerDate=null;
+  function setDate(date){
+    dateParts={year:date.year,month:date.month,day:date.day};
+    input.value=DateCalendars.formatDate(dateParts);
+    $('year-trigger').textContent=numberFa.format(dateParts.year);
+    $('month-trigger').textContent=monthNames[calendar.value][dateParts.month-1];
+    $('day-trigger').textContent=numberFa.format(dateParts.day);
+    render();
+  }
   function validDays(year,month){
     const days=[];
     for(let day=1;day<=31;day++){
@@ -52,57 +55,65 @@
     }
     return days;
   }
-  function paintWheel(id,options,selected){
-    const wheel=$(id);wheel.replaceChildren();
-    options.forEach(option=>{
-      const item=document.createElement('button');
-      item.type='button';item.className='wheel-option';item.setAttribute('role','option');
-      item.dataset.value=String(option.value);item.textContent=option.label;
-      item.setAttribute('aria-selected',String(option.value===selected));
-      wheel.append(item);
-    });
-    const index=Math.max(0,options.findIndex(option=>option.value===selected));
-    wheel.scrollTop=index*wheelRowHeight;
+  function closeMenus(){
+    for(const id of ['calendar-options','year-options','month-options','day-options'])$(id).hidden=true;
+    for(const id of ['calendar-trigger','year-trigger','month-trigger','day-trigger'])$(id).setAttribute('aria-expanded','false');
   }
-  function paintPicker(){
-    if(!pickerDate)return;
-    const range=DateCalendars.calendarRange(calendar.value);
-    const years=[];
-    for(let year=range.minYear;year<=range.maxYear;year++)years.push({value:year,label:numberFa.format(year)});
-    const months=monthNames[calendar.value].map((name,index)=>({value:index+1,label:name}));
-    let days=validDays(pickerDate.year,pickerDate.month);
-    if(!days.length){pickerDate.day=1;days=validDays(pickerDate.year,pickerDate.month);}
-    if(!days.includes(pickerDate.day))pickerDate.day=days[days.length-1];
-    paintWheel('year-wheel',years,pickerDate.year);
-    paintWheel('month-wheel',months,pickerDate.month);
-    paintWheel('day-wheel',days.map(day=>({value:day,label:numberFa.format(day)})),pickerDate.day);
-    $('picker-caption').textContent=`${monthNames[calendar.value][pickerDate.month-1]} ${numberFa.format(pickerDate.year)}`;
-  }
-  function closePicker(){picker.hidden=true;pickerTrigger.setAttribute('aria-expanded','false');document.body.style.overflow='';}
-  function openPicker(){
-    try{pickerDate=DateCalendars.parse(input.value);}catch{pickerDate=todayParts();}
-    paintPicker();picker.hidden=false;pickerTrigger.setAttribute('aria-expanded','true');document.body.style.overflow='hidden';
-    $('picker-close').focus();
-  }
-  function chooseWheel(id,field){
-    const wheel=$(id);let timer;
-    function settle(){
-      const index=Math.max(0,Math.min(wheel.children.length-1,Math.round(wheel.scrollTop/wheelRowHeight)));
-      const value=Number(wheel.children[index]?.dataset.value);
-      if(!value||pickerDate[field]===value)return;
-      pickerDate[field]=value;
-      if(field!=='day')paintPicker();
-      else wheel.querySelectorAll('.wheel-option').forEach(item=>item.setAttribute('aria-selected',String(Number(item.dataset.value)===value)));
-      $('picker-caption').textContent=`${monthNames[calendar.value][pickerDate.month-1]} ${numberFa.format(pickerDate.year)}`;
+  function fillOptions(menu,options,selected,kind){
+    menu.replaceChildren();
+    for(const option of options){
+      const button=document.createElement('button');
+      button.type='button';button.className=kind==='calendar'?'calendar-option':'date-option';
+      button.setAttribute('role','option');button.setAttribute('aria-selected',String(option.value===selected));
+      button.dataset.value=String(option.value);button.textContent=option.label;
+      menu.append(button);
     }
-    wheel.addEventListener('scroll',()=>{clearTimeout(timer);timer=setTimeout(settle,100);},{passive:true});
-    wheel.addEventListener('click',event=>{
-      const item=event.target.closest('.wheel-option');if(!item)return;
-      const index=Array.prototype.indexOf.call(wheel.children,item);
-      wheel.scrollTo({top:index*wheelRowHeight,behavior:'smooth'});
-    });
+    menu.hidden=false;
+    menu.querySelector('[aria-selected="true"]')?.scrollIntoView({block:'nearest'});
   }
-  chooseWheel('year-wheel','year');chooseWheel('month-wheel','month');chooseWheel('day-wheel','day');
+  function openDateOptions(field){
+    if(!$(field+'-options').hidden){closeMenus();return;}
+    closeMenus();
+    const range=DateCalendars.calendarRange(calendar.value);
+    let options,selected;
+    if(field==='year'){
+      options=[];for(let year=range.minYear;year<=range.maxYear;year++)options.push({value:year,label:numberFa.format(year)});
+      selected=dateParts.year;
+    }else if(field==='month'){
+      options=monthNames[calendar.value].map((label,index)=>({value:index+1,label}));selected=dateParts.month;
+    }else{
+      options=validDays(dateParts.year,dateParts.month).map(day=>({value:day,label:numberFa.format(day)}));selected=dateParts.day;
+    }
+    const menu=$(field+'-options'),trigger=$(field+'-trigger');
+    fillOptions(menu,options,selected,'date');trigger.setAttribute('aria-expanded','true');
+  }
+  $('date-fields').addEventListener('click',event=>{
+    const trigger=event.target.closest('.date-field-trigger');
+    if(trigger){openDateOptions(trigger.id.replace('-trigger',''));return;}
+    const option=event.target.closest('.date-option');
+    if(!option)return;
+    const menu=option.parentElement,field=menu.id.replace('-options',''),value=Number(option.dataset.value);
+    const next={...dateParts,[field]:value};
+    const days=validDays(next.year,next.month);
+    if(!days.includes(next.day))next.day=Math.min(next.day,days[days.length-1]);
+    dateTouched=true;closeMenus();setDate(next);
+  });
+  $('calendar-trigger').addEventListener('click',()=>{
+    if(!$('calendar-options').hidden){closeMenus();return;}
+    closeMenus();const menu=$('calendar-options');
+    fillOptions(menu,Object.entries(calendarNames).map(([value,label])=>({value,label})),calendar.value,'calendar');
+    $('calendar-trigger').setAttribute('aria-expanded','true');
+  });
+  $('calendar-options').addEventListener('click',event=>{
+    const option=event.target.closest('.calendar-option');if(!option)return;
+    const old=DateCalendars.convert(calendar.value,input.value);
+    calendar.value=option.dataset.value;
+    $('calendar-current').textContent=calendarNames[calendar.value];
+    $('calendar-options').querySelectorAll('.calendar-option').forEach(item=>item.setAttribute('aria-selected',String(item===option)));
+    dateTouched=true;closeMenus();setDate(DateCalendars.toCalendar(calendar.value,old.serial));
+  });
+  document.addEventListener('click',event=>{if(!event.target.closest('.calendar-picker, .date-fields'))closeMenus();});
+  document.addEventListener('keydown',event=>{if(event.key==='Escape')closeMenus();});
   function render(){
     error.hidden=true;save.disabled=!canSave;
     try{
@@ -122,18 +133,7 @@
       save.dataset.persian='';save.disabled=true;
     }
   }
-  calendar.addEventListener('change',()=>{dateTouched=true;try{const oldDate=DateCalendars.convert(activeCalendar,input.value);input.value=DateCalendars.formatDate(DateCalendars.toCalendar(calendar.value,oldDate.serial));}catch{}activeCalendar=calendar.value;updateDateLabel(DateCalendars.parse(input.value));if(!picker.hidden)openPicker();render();});
-  pickerTrigger.addEventListener('click',openPicker);
-  $('picker-close').addEventListener('click',closePicker);
-  $('picker-cancel').addEventListener('click',closePicker);
-  picker.addEventListener('click',event=>{if(event.target===picker)closePicker();});
-  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!picker.hidden)closePicker();});
-  $('picker-confirm').addEventListener('click',()=>{
-    try{DateCalendars.fromCalendar(calendar.value,pickerDate);dateTouched=true;input.value=DateCalendars.formatDate(pickerDate);updateDateLabel(pickerDate);render();closePicker();}
-    catch(e){error.textContent=e.message||'این تاریخ معتبر نیست.';error.hidden=false;}
-  });
-  input.addEventListener('input',()=>{updateDateLabel(DateCalendars.parse(input.value));render();});
-  $('today').addEventListener('click',()=>{dateTouched=true;const current=todayParts();input.value=DateCalendars.formatDate(current);updateDateLabel(current);render();});
+  $('today').addEventListener('click',()=>{dateTouched=true;closeMenus();setDate(todayParts());});
   save.addEventListener('click',async()=>{
     if(!canSave)return;
     save.disabled=true;
@@ -156,6 +156,6 @@
       }
     }catch(error){saveHint.textContent=error.message||'ثبت انجام نشد. صفحه رو از داخل بات باز کن و دوباره تلاش کن.';save.disabled=false;}
   });
-  input.value=DateCalendars.formatDate(todayParts());updateDateLabel(todayParts());render();
+  setDate(todayParts());
   if(window.currentBirthday)applySavedBirthday(window.currentBirthday);
 })();
