@@ -1,19 +1,106 @@
 <!doctype html>
-<html lang="fa" dir="rtl">
+<html lang="fa" dir="rtl" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="color-scheme" content="dark">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#080a0b">
   <title>تولد عزیزان | مینی‌اپ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&amp;family=Vazirmatn:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const telegram = window.Telegram && window.Telegram.WebApp;
+      const storageKey = 'yadet-theme';
+      const systemScheme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+      let manualTheme = '';
+      try {
+        const savedTheme = window.localStorage.getItem(storageKey);
+        if (savedTheme === 'light' || savedTheme === 'dark') manualTheme = savedTheme;
+      } catch { /* Theme selection still works when storage is unavailable. */ }
+
+      function applyTheme(theme, persist = false) {
+        const nextTheme = theme === 'light' ? 'light' : 'dark';
+        root.dataset.theme = nextTheme;
+        const color = nextTheme === 'light' ? '#FFF7ED' : '#080A0B';
+        const themeColor = document.querySelector('meta[name="theme-color"]');
+        if (themeColor) themeColor.content = color;
+        if (persist) {
+          manualTheme = nextTheme;
+          try { window.localStorage.setItem(storageKey, nextTheme); } catch { /* Keep the current choice for this visit. */ }
+        }
+        if (telegram) {
+          try { if (typeof telegram.setHeaderColor === 'function') telegram.setHeaderColor(color); } catch { /* Older Telegram clients may not support this method. */ }
+          try { if (typeof telegram.setBackgroundColor === 'function') telegram.setBackgroundColor(color); } catch { /* Older Telegram clients may not support this method. */ }
+        }
+        window.dispatchEvent(new Event('yadet-theme-change'));
+      }
+
+      const telegramScheme = telegram && (telegram.colorScheme === 'light' || telegram.colorScheme === 'dark')
+        ? telegram.colorScheme
+        : '';
+      applyTheme(manualTheme || telegramScheme || (systemScheme && systemScheme.matches ? 'dark' : 'light'));
+
+      if (telegram && typeof telegram.onEvent === 'function') {
+        telegram.onEvent('themeChanged', () => {
+          if (!manualTheme && (telegram.colorScheme === 'light' || telegram.colorScheme === 'dark')) {
+            applyTheme(telegram.colorScheme);
+          }
+        });
+      }
+      if (systemScheme && typeof systemScheme.addEventListener === 'function') {
+        systemScheme.addEventListener('change', event => {
+          if (!manualTheme && !telegram) applyTheme(event.matches ? 'dark' : 'light');
+        });
+      }
+
+      window.YadetTheme = {
+        current: () => root.dataset.theme,
+        toggle: () => applyTheme(root.dataset.theme === 'dark' ? 'light' : 'dark', true)
+      };
+      document.addEventListener('DOMContentLoaded', () => {
+        const button = document.getElementById('theme-toggle');
+        if (!button) return;
+        const label = button.querySelector('[data-theme-label]');
+        const syncButton = () => {
+          const target = root.dataset.theme === 'dark' ? 'light' : 'dark';
+          const text = target === 'light' ? 'حالت روشن' : 'حالت تیره';
+          if (label) label.textContent = text;
+          button.setAttribute('aria-label', `تغییر به ${text}`);
+          button.setAttribute('title', `تغییر به ${text}`);
+        };
+        button.addEventListener('click', () => window.YadetTheme.toggle());
+        window.addEventListener('yadet-theme-change', syncButton);
+        syncButton();
+      });
+    })();
+  </script>
   <script src="./api-config.js"></script>
   <script src="./calendar.js?v=20261018-7"></script>
   <script defer src="./app.js?v=20261018-7"></script>
   <style>
     :root { color-scheme: dark; --bg: #080a0b; --fg: #f4f5f7; --muted: #929b9f; --card: #121719; --accent: #e6bd63; --accent-dark: #f4d98f; --accentText: #17130b; --line: #283033; }
     * { box-sizing: border-box; }
-    body { margin: 0; padding: max(18px, env(safe-area-inset-top)) 16px calc(112px + env(safe-area-inset-bottom)); background: radial-gradient(ellipse at 50% 0%, #46361a33 0, transparent 42%), var(--bg); color: var(--fg); font: 15px/1.7 system-ui, sans-serif; }
+    body { margin: 0; padding: max(18px, env(safe-area-inset-top)) 16px calc(112px + env(safe-area-inset-bottom)); background: radial-gradient(ellipse at 50% 0%, #46361a33 0, transparent 42%), var(--bg); color: var(--fg); font: 15px/1.7 'Vazirmatn', system-ui, sans-serif; transition: background .22s ease, color .22s ease; }
     main { max-width: 540px; margin: 0 auto; }
+    .brand-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 4px 0 15px; padding: 10px 13px; border: 1px solid #252d30; border-radius: 20px; background: linear-gradient(145deg, #151a1c, #101415); box-shadow: 0 8px 24px #0004; }
+    .brand-lockup { display: flex; align-items: center; gap: 9px; min-width: 0; }
+    .brand-logo { display: block; flex: 0 0 42px; width: 42px; height: 42px; }
+    .brand-copy { min-width: 0; }
+    .brand-name { color: var(--fg); font: 900 1.12rem/1.1 'Nunito', 'Vazirmatn', sans-serif; letter-spacing: -.035em; direction: ltr; }
+    .brand-tagline { margin-top: 3px; color: var(--muted); font-size: .69rem; line-height: 1.35; }
+    .brand-heart-left, .brand-heart-right, .brand-spark { transition: fill .22s ease; }
+    .brand-heart-left { fill: url(#yadet-purple); }
+    .brand-heart-right { fill: url(#yadet-pink); }
+    .brand-spark { fill: #ff8a8a; }
+    .theme-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 0 0 auto; min-height: 40px; padding: 7px 10px; border: 1px solid #70572888; border-radius: 999px; background: #201b11; color: var(--accent-dark); font: inherit; font-size: .76rem; font-weight: 750; cursor: pointer; transition: background .2s ease, border-color .2s ease, color .2s ease, transform .2s ease; }
+    .theme-toggle:active { transform: scale(.97); }
+    .theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .theme-toggle svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .theme-toggle .moon-icon { display: none; }
     .profile-card, .card { border: 1px solid #252d30; border-radius: 24px; background: linear-gradient(145deg, #151a1c, #101415); box-shadow: 0 12px 34px #0006; }
     .profile-card { padding: 18px; margin: 4px 0 16px; }
     .profile-head { display: flex; align-items: center; gap: 14px; }
@@ -110,10 +197,77 @@
     @media (max-width: 360px) { .date-fields { grid-template-columns: .82fr 1.3fr .68fr; gap: 6px; } .date-field-trigger { gap: 2px; padding-inline: 5px; font-size: .8rem; } .date-field-trigger::after { font-size: .95rem; } }
     @media (prefers-reduced-motion: reduce) { .screen { animation: none; } }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; } }
+    :root[data-theme="light"] { color-scheme: light; --bg: #fff7ed; --fg: #4b3f72; --muted: #706782; --card: #fffdfa; --accent: #8b6cf6; --accent-dark: #4b3f72; --accentText: #fff; --line: #e7dfed; }
+    :root[data-theme="light"] body { background: radial-gradient(ellipse at 50% 0%, #8b6cf626 0, transparent 44%), var(--bg); }
+    :root[data-theme="light"] .brand-bar { border-color: #e7dfed; background: linear-gradient(135deg, #fffdfa, #fff6f0); box-shadow: 0 8px 24px #4b3f7210; }
+    :root[data-theme="light"] .theme-toggle { border-color: #cdbff0; background: #f2edff; color: #4b3f72; }
+    :root[data-theme="light"] .moon-icon { display: block; }
+    :root[data-theme="light"] .sun-icon { display: none; }
+    :root[data-theme="light"] .profile-card, :root[data-theme="light"] .card { border-color: #e7dfed; background: linear-gradient(145deg, #fffdfa, #fffaf6); box-shadow: 0 12px 34px #4b3f7212; }
+    :root[data-theme="light"] .avatar { border-color: #8b6cf6; background: #f0eaff; color: #4b3f72; box-shadow: 0 0 18px #8b6cf628; }
+    :root[data-theme="light"] .profile-id { border-color: #e7dfed; background: #fff; color: #706782; }
+    :root[data-theme="light"] .birthday-box { border-color: #ff8a8a70; background: linear-gradient(110deg, #fff0eb, #f5f0ff); }
+    :root[data-theme="light"] .tabs { border-color: #e7dfed; background: #f2edfa; }
+    :root[data-theme="light"] .field-label, :root[data-theme="light"] label { color: #4b3f72; }
+    :root[data-theme="light"] .tab { color: #706782; }
+    :root[data-theme="light"] .tab.active { background: linear-gradient(135deg, #8b6cf6, #4b3f72); color: #fff; box-shadow: 0 4px 18px #8b6cf636; }
+    :root[data-theme="light"] input, :root[data-theme="light"] select { border-color: #ded7e8; background: #fff; color: #4b3f72; color-scheme: light; }
+    :root[data-theme="light"] select option { color: #4b3f72; background: #fffdfa; }
+    :root[data-theme="light"] input:focus, :root[data-theme="light"] select:focus { border-color: #8b6cf6; box-shadow: 0 0 0 4px #8b6cf620; }
+    :root[data-theme="light"] .calendar-trigger, :root[data-theme="light"] .date-field-trigger { border-color: #cdbff0; background: linear-gradient(145deg, #f3eeff, #fff8f3); color: #4b3f72; box-shadow: 0 6px 18px #4b3f7210; }
+    :root[data-theme="light"] .calendar-trigger::after, :root[data-theme="light"] .date-field-trigger::after { color: #8b6cf6; }
+    :root[data-theme="light"] .date-options, :root[data-theme="light"] .calendar-options { border-color: #cdbff0; background: rgba(255, 253, 250, .98); box-shadow: 0 12px 30px #4b3f7220; scrollbar-color: #9a93b7 #f4effa; }
+    :root[data-theme="light"] .date-option[aria-selected="true"], :root[data-theme="light"] .calendar-option[aria-selected="true"] { background: linear-gradient(135deg, #8b6cf624, #ff8a8a20); color: #4b3f72; }
+    :root[data-theme="light"] .date-option:active, :root[data-theme="light"] .calendar-option:active { background: #8b6cf638; }
+    :root[data-theme="light"] .primary { background: linear-gradient(135deg, #8b6cf6, #4b3f72); color: #fff; box-shadow: 0 7px 22px #8b6cf638; }
+    :root[data-theme="light"] .primary:hover { box-shadow: 0 9px 28px #8b6cf655; }
+    :root[data-theme="light"] .secondary { border-color: #ff8a8a; background: #fff1ec; color: #4b3f72; }
+    :root[data-theme="light"] .result:not(:empty) { border-color: #8b6cf640; background: #f4efff; }
+    :root[data-theme="light"] .date-result { border-color: #e7dfed; background: #fff; }
+    :root[data-theme="light"] .distance { border-color: #ff8a8a90; background: #fff0eb; color: #4b3f72; }
+    :root[data-theme="light"] .error, :root[data-theme="light"] .status.error { color: #c33d59; }
+    :root[data-theme="light"] .friend { border-color: #e7dfed; background: #fff; }
+    :root[data-theme="light"] .delete-friend { border-color: #ffb3bb; background: #fff0f1; color: #b93450; }
+    :root[data-theme="light"] .toggle-friend { border-color: #cdbff0; background: #f2edff; color: #4b3f72; }
+    :root[data-theme="light"] .toggle-friend[data-notification="0"] { border-color: #e7dfed; background: #f5f2f7; color: #706782; }
+    :root[data-theme="light"] .friend-form { border-color: #ded2ef; background: #fffaf6; }
+    :root[data-theme="light"] .home-hero { border-color: #d9cef0; background: radial-gradient(ellipse at 100% 0, #8b6cf626 0, transparent 62%), linear-gradient(145deg, #fffdfa, #fff3ee); box-shadow: 0 12px 34px #4b3f7212; }
+    :root[data-theme="light"] .home-link { border-color: #e7dfed; background: linear-gradient(145deg, #fff, #fff8f3); color: #4b3f72; }
+    :root[data-theme="light"] .bottom-nav { border-color: #ded2ef; background: rgb(255 253 250 / 94%); box-shadow: 0 10px 32px #4b3f7220; }
+    :root[data-theme="light"] .nav-button { color: #817991; }
+    :root[data-theme="light"] .nav-button[aria-current="page"] { border-color: #cdbff0; color: #4b3f72; background: #f2edff; }
+    :root[data-theme="dark"] .animated-icon { animation-name: icon-glow; }
+    :root[data-theme="light"] .animated-icon { animation-name: icon-glow-light; }
+    :root[data-theme="light"] .visual-icon { color: #4b3f72; }
+    @keyframes icon-glow-light { from { filter: drop-shadow(0 0 0 #8b6cf600); transform: translateY(0); } to { filter: drop-shadow(0 0 5px #8b6cf680); transform: translateY(-1px); } }
+    :root[data-theme="dark"] .brand-heart-left, :root[data-theme="dark"] .brand-heart-right, :root[data-theme="dark"] .brand-spark { fill: #fff; }
+    @media (max-width: 390px) { .brand-bar { gap: 6px; padding: 9px 10px; } .brand-logo { flex-basis: 38px; width: 38px; height: 38px; } .brand-tagline { font-size: .63rem; } .theme-toggle { gap: 4px; padding-inline: 8px; font-size: .7rem; } }
   </style>
 </head>
 <body>
   <main>
+    <section class="brand-bar" aria-label="برند یادت">
+      <div class="brand-lockup">
+        <svg class="brand-logo" viewBox="0 0 64 64" aria-hidden="true">
+          <defs>
+            <linearGradient id="yadet-purple" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b6cf6"/><stop offset="1" stop-color="#623fc4"/></linearGradient>
+            <linearGradient id="yadet-pink" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff8a8a"/><stop offset="1" stop-color="#e75b9a"/></linearGradient>
+          </defs>
+          <path class="brand-heart-left" d="M32 57 9.4 35.1C-2.1 23.9 3.2 7.1 17.2 5.7 24.1 5 29.1 8.4 32 14.7V57Z"/>
+          <path class="brand-heart-right" d="M32 57 54.6 35.1C66.1 23.9 60.8 7.1 46.8 5.7 39.9 5 34.9 8.4 32 14.7V57Z"/>
+          <path class="brand-spark" d="M32 0c2.3 6.9 4.1 8.7 11 11-6.9 2.3-8.7 4.1-11 11-2.3-6.9-4.1-8.7-11-11C27.9 8.7 29.7 6.9 32 0Z"/>
+        </svg>
+        <div class="brand-copy">
+          <div class="brand-name" dir="ltr">Yadet</div>
+          <div class="brand-tagline">عزیزات یادت می‌مونن</div>
+        </div>
+      </div>
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="تغییر پوسته">
+        <svg class="sun-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>
+        <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 15.5A8.5 8.5 0 0 1 8.5 3.5 8.5 8.5 0 1 0 20.5 15.5Z"/></svg>
+        <span data-theme-label>حالت روشن</span>
+      </button>
+    </section>
     <section class="screen" data-panel="home" aria-labelledby="home-title" hidden>
       <div class="home-hero">
         <p class="eyebrow">مدیریت تولدهای تو</p>
