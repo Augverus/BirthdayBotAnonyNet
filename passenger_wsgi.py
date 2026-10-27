@@ -10,10 +10,21 @@ from urllib.request import Request, urlopen
 
 
 BACKEND = "http://127.0.0.1:8080"
+MAX_REQUEST_BODY_BYTES = 16 * 1024
 HOP_BY_HOP = {
     "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
     "te", "trailer", "transfer-encoding", "upgrade",
 }
+
+
+def _error_response(start_response, status, message):
+    payload = message.encode("utf-8")
+    start_response(f"{status.value} {status.phrase}", [
+        ("Content-Type", "text/plain; charset=utf-8"),
+        ("Content-Length", str(len(payload))),
+        ("Cache-Control", "no-store"),
+    ])
+    return [payload]
 
 
 def application(environ, start_response):
@@ -39,7 +50,14 @@ def application(environ, start_response):
     try:
         length = int(environ.get("CONTENT_LENGTH") or "0")
     except ValueError:
-        length = 0
+        return _error_response(start_response, HTTPStatus.BAD_REQUEST,
+                               "Invalid request body length.")
+    if length < 0:
+        return _error_response(start_response, HTTPStatus.BAD_REQUEST,
+                               "Invalid request body length.")
+    if length > MAX_REQUEST_BODY_BYTES:
+        return _error_response(start_response, HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                               "Request body is too large.")
     body = environ["wsgi.input"].read(length) if length else None
     request = Request(url, data=body, headers=headers,
                       method=environ.get("REQUEST_METHOD", "GET"))
@@ -56,9 +74,8 @@ def application(environ, start_response):
             ]
             payload = response.read()
     except (URLError, TimeoutError, OSError):
-        status = HTTPStatus.SERVICE_UNAVAILABLE
-        response_headers = [("Content-Type", "text/plain; charset=utf-8")]
-        payload = b"The bot API is not running. Please try again shortly."
+        return _error_response(start_response, HTTPStatus.SERVICE_UNAVAILABLE,
+                               "The bot API is not running. Please try again shortly.")
 
     phrase = HTTPStatus(status).phrase if status in HTTPStatus._value2member_map_ else "Unknown"
     start_response(f"{status} {phrase}", response_headers)
