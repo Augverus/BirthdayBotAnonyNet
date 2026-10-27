@@ -57,22 +57,28 @@ async def capture_update_error(event: ErrorEvent):
 
 class FriendBirthdayFlow(StatesGroup):
     name = State()
+    year = State()
     month = State()
     day = State()
 
 
-def months_keyboard():
-    buttons = [ui.button(name, f'month:{i}', 'success' if i % 2 else 'primary')
-               for i, name in enumerate(cal.MONTHS, 1)]
-    return ui.inline([buttons[i:i+3] for i in range(0, 12, 3)] +
-                     [[ui.button('↩️ خانه', 'user:home')]])
+class MyBirthdayFlow(StatesGroup):
+    year = State()
+    month = State()
+    day = State()
 
 
-def days_keyboard(month):
-    buttons = [ui.button(str(day), f'day:{month}:{day}', 'success')
-               for day in range(1, cal.days_in_month(month)+1)]
-    return ui.inline([buttons[i:i+5] for i in range(0, len(buttons), 5)] +
-                     [[ui.button('⬅️ انتخاب ماه', 'back_to_months'), ui.button('✖️ لغو', 'user:home', 'danger')]])
+def _cancel_requested(message):
+    text = (message.text or '').strip()
+    return bool(text and text.split(maxsplit=1)[0].split('@')[0] == '/cancel')
+
+
+async def _cancel_flow(message, state):
+    if not _cancel_requested(message):
+        return False
+    await state.clear()
+    await message.answer('✖️ عملیات جاری لغو شد.', reply_markup=ui.home(message.from_user.id))
+    return True
 
 
 def join_keyboard():
@@ -213,7 +219,7 @@ async def greet(message, uid):
     welcome = store.setting('welcome', 'به خونهٔ تولدها خوش اومدی! ✨\nتاریخ تولدت رو ثبت کن و شمارش معکوس روز خاصت رو ببین.')
     text = f'{ui.emoji("birthday", "🎂")} <b>سلام {ui.safe_name(u["name"])}!</b>\n\n{configured_text("welcome", welcome, name=ui.safe_name(u["name"]))}'
     if u['month']:
-        text += f'\n\n{ui.emoji("birthday", "🎂")} تولدت: <b>{cal.birthday_text(u["month"], u["day"])}</b>\n{ui.emoji("until", "⏳")} <b>{cal.remaining(u["month"], u["day"])} روز</b> تا جشن تو!'
+        text += f'\n\n{ui.emoji("birthday", "🎂")} تولدت: <b>{cal.birthday_text(u["month"], u["day"], u.get("birth_year"))}</b>\n{ui.emoji("until", "⏳")} <b>{cal.remaining(u["month"], u["day"])} روز</b> تا جشن تو!'
     if uid in store.admins():
         text += '\n\n🛠 پنل مدیریت: /admin'
     await message.answer(text, parse_mode='HTML', reply_markup=ui.home(uid))
@@ -292,15 +298,13 @@ async def mini_app_data_handler(message: Message, bot):
             raise ValueError
         year, month, day = payload['year'], payload['month'], payload['day']
         birthday = jdatetime.date(year, month, day)
-        # The selected date can be later this year: birthdays store month/day only.
-        # Reject future years while allowing an upcoming birthday in the current year.
+        # A birthday may be later this year; its original Solar Hijri year is saved.
         if year > cal.today().year or not cal.valid_birthday(month, day):
             raise ValueError
     except (ValueError, TypeError, KeyError, json.JSONDecodeError, RecursionError):
         await message.answer('تاریخ ارسالی معتبر نیست؛ تاریخ را دوباره بررسی کن.')
         return
-    # The entered year is validated but is not persisted; annual reminders use month/day.
-    await save_birthday(message, message.from_user.id, month, day, bot, notification=None)
+    await save_birthday(message, message.from_user.id, year, month, day, bot, notification=None)
 
 
 def _unique_json_object(pairs):
@@ -331,7 +335,7 @@ def friends_listing(uid, offset=0):
         days = str(days_left).translate(digits)
         timing = f'{ui.emoji("birthday", "🎂")} امروز تولدشه!' if days_left == 0 else f'{ui.emoji("until", "⏳")} {days} روز تا تولدش مانده'
         reminder = f'{ui.emoji("on", "🔔")} یادآوری روشن' if row['notification'] else f'{ui.emoji("off", "🔕")} یادآوری خاموش'
-        lines.append(f"<b>{escape(row['name'])}</b> — {cal.birthday_text(row['month'], row['day'])}\n{timing} · {reminder}")
+        lines.append(f"<b>{escape(row['name'])}</b> — {cal.birthday_text(row['month'], row['day'], row.get('year'))}\n{timing} · {reminder}")
         buttons.append([
             ui.button('🔕 خاموش کردن یادآوری' if row['notification'] else '🔔 روشن کردن یادآوری',
                       f"friend:toggle:{row['id']}:{offset}"),
@@ -381,7 +385,7 @@ async def friend_add_start(callback: CallbackQuery, state: FSMContext):
 @user_router.message(FriendBirthdayFlow.name)
 async def friend_name(message: Message, state: FSMContext):
     name = ' '.join((message.text or '').split())
-    if name == '/cancel':
+    if _cancel_requested(message):
         await state.clear()
         await message.answer('افزودن تولد لغو شد.', reply_markup=ui.home(message.from_user.id))
         return
@@ -389,51 +393,61 @@ async def friend_name(message: Message, state: FSMContext):
         await message.answer('لطفاً نامی کوتاه‌تر از ۸۰ نویسه بفرست.')
         return
     await state.update_data(friend_name=name)
-    await state.set_state(FriendBirthdayFlow.month)
-    buttons = [ui.button(month, f'friend:month:{i}', 'success' if i % 2 else 'primary')
-               for i, month in enumerate(cal.MONTHS, 1)]
-    await message.answer('🌸 ماه تولدش را انتخاب کن:', reply_markup=ui.inline(
-        [buttons[i:i+3] for i in range(0, 12, 3)]))
+    await state.set_state(FriendBirthdayFlow.year)
+    await message.answer('سال تولدش را با عدد وارد کن (شمسی؛ اعداد فارسی، عربی یا انگلیسی پذیرفته می‌شوند).')
 
 
-@user_router.callback_query(FriendBirthdayFlow.month, F.data.startswith('friend:month:'))
-async def friend_month(callback: CallbackQuery, state: FSMContext):
+@user_router.message(FriendBirthdayFlow.year)
+async def friend_year(message: Message, state: FSMContext):
+    if await _cancel_flow(message, state):
+        return
     try:
-        month = int(callback.data.rsplit(':', 1)[1])
-        if not 1 <= month <= 12:
-            raise ValueError()
+        year = cal.parse_number(message.text)
+        if not 1 <= year <= cal.today().year:
+            raise ValueError
     except ValueError:
-        await callback.answer('ماه انتخاب‌شده معتبر نیست.', show_alert=True)
+        await message.answer('سال تولد را با عدد معتبر و نه در آینده وارد کن.')
+        return
+    await state.update_data(friend_year=year)
+    await state.set_state(FriendBirthdayFlow.month)
+    await message.answer('ماه تولدش را با عدد وارد کن (۱ تا ۱۲).')
+
+
+@user_router.message(FriendBirthdayFlow.month)
+async def friend_month(message: Message, state: FSMContext):
+    if await _cancel_flow(message, state):
+        return
+    try:
+        month = cal.parse_number(message.text)
+        if not 1 <= month <= 12:
+            raise ValueError
+    except ValueError:
+        await message.answer('ماه را با عددی بین ۱ تا ۱۲ وارد کن.')
         return
     await state.update_data(friend_month=month)
     await state.set_state(FriendBirthdayFlow.day)
-    max_day = 31 if month <= 6 else 30
-    buttons = [ui.button(str(day), f'friend:day:{month}:{day}', 'success')
-               for day in range(1, max_day + 1)]
-    await callback.answer()
-    await callback.message.edit_text(f'{cal.MONTHS[month-1]} — choose the day:',
-                                     reply_markup=ui.inline([buttons[i:i+5] for i in range(0, len(buttons), 5)]))
+    await message.answer('روز تولدش را با عدد وارد کن.')
 
 
-@user_router.callback_query(FriendBirthdayFlow.day, F.data.startswith('friend:day:'))
-async def friend_day(callback: CallbackQuery, state: FSMContext):
+@user_router.message(FriendBirthdayFlow.day)
+async def friend_day(message: Message, state: FSMContext):
+    if await _cancel_flow(message, state):
+        return
+    data = await state.get_data()
     try:
-        _, _, month, day = callback.data.split(':')
-        month, day = int(month), int(day)
-        data = await state.get_data()
-        if month != data.get('friend_month') or not cal.valid_birthday(month, day):
-            raise ValueError()
-    except (ValueError, TypeError):
-        await callback.answer('تاریخ انتخاب‌شده معتبر نیست.', show_alert=True)
+        day = cal.parse_number(message.text)
+        jdatetime.date(data['friend_year'], data['friend_month'], day)
+    except (ValueError, TypeError, KeyError):
+        await message.answer('این روز در آن سال و ماه معتبر نیست؛ روز را دوباره با عدد وارد کن.')
         return
     await state.update_data(friend_day=day)
     await state.set_state()
-    await callback.answer()
-    await callback.message.edit_text(
-        f"🎂 تولد <b>{escape(data['friend_name'])}</b>: {cal.birthday_text(month, day)}\n\n"
-        'دوست داری روز تولدش بهت یادآوری کنم؟', parse_mode='HTML', reply_markup=ui.inline([
+    await message.answer(
+        f"{ui.emoji('birthday', '🎂')} تولد <b>{escape(data['friend_name'])}</b>: "
+        f"{cal.birthday_text(data['friend_month'], day, data['friend_year'])}\n\n"
+        'دوست داری روزهای نزدیک تولدش بهت یادآوری کنم؟', parse_mode='HTML', reply_markup=ui.inline([
             [ui.button('🔔 بله، یادآوری کن', 'friend:notify:1', 'success'),
-             ui.button('🔕 بدون یادآوری', 'friend:notify:0')]]))
+             ui.button('🔕 بدون یادآوری', 'friend:notify:0', 'primary')]]))
 
 
 @user_router.callback_query(F.data.startswith('friend:notify:'))
@@ -441,21 +455,24 @@ async def friend_save(callback: CallbackQuery, state: FSMContext):
     try:
         enabled = int(callback.data.rsplit(':', 1)[1])
         data = await state.get_data()
-        month, day, name = data['friend_month'], data['friend_day'], data['friend_name']
-        if enabled not in (0, 1) or not cal.valid_birthday(month, day):
+        year, month, day, name = (data['friend_year'], data['friend_month'],
+                                  data['friend_day'], data['friend_name'])
+        if enabled not in (0, 1):
             raise ValueError()
     except (KeyError, ValueError, TypeError):
         await callback.answer('لطفاً دوباره از بخش تولد عزیزان شروع کن.', show_alert=True)
         return
-    friend_id = store.add_friend_birthday(callback.from_user.id, name, month, day, enabled)
+    friend_id = store.add_friend_birthday(callback.from_user.id, name, month, day,
+                                          enabled, year=year)
     await state.clear()
     if friend_id is None:
         await callback.answer('حداکثر می‌توانی ۵۰ تولد ثبت کنی.', show_alert=True)
         return
     await callback.answer('ثبت شد!')
     await callback.message.edit_text(
-        f"Saved <b>{escape(name)}</b> — {cal.birthday_text(month, day)}.\n"
-        + ('🔔 یادآوری روز تولد روشن است.' if enabled else '🔕 یادآوری روز تولد خاموش است.'), parse_mode='HTML')
+        f"{ui.emoji('on' if enabled else 'off', '🔔' if enabled else '🔕')} "
+        f"<b>{escape(name)}</b> — {cal.birthday_text(month, day, year)} ثبت شد.\n"
+        + ('یادآوری روزهای نزدیک تولد روشن است.' if enabled else 'یادآوری خاموش است.'), parse_mode='HTML')
 
 
 @user_router.callback_query(F.data == 'friend:list')
@@ -517,11 +534,13 @@ async def friend_delete(callback: CallbackQuery):
 
 @user_router.message(Command('help'))
 async def help_handler(message: Message):
-    await message.answer('''🎂 تولدت را ثبت کن و روزهای مانده تا آن را ببین.
+    await message.answer('''🎂 تولدت را با سال، ماه و روز ثبت کن و روزهای مانده تا آن را ببین.
 👥 در بخش تولد عزیزان، تولد خانواده و دوستانت را ذخیره کن.
 🗓 مبدل تاریخ، تقویم شمسی و میلادی را تبدیل می‌کند.
+🔔 یادآوری تولد در روز تولد و ۱۰، ۷ و ۳ روز مانده فعال می‌شود.
 
 /mybirthday — شمارش معکوس تولد خودت
+/setbirthday سال ماه روز — ثبت تاریخ شمسی با عدد فارسی، عربی یا انگلیسی
 /deletebirthday — حذف تولد خودت
 /friends — دیدن تولدهای عزیزان
 /id — شناسه عددی
@@ -538,55 +557,144 @@ async def cancel_handler(message: Message, state: FSMContext):
 @user_router.message(F.text.in_({ui.BTN_REGISTER, '🟢 ثبت تولد', ui.BTN_EDIT}))
 async def register_handler(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer(f'{ui.emoji("since", "📅")} <b>ماه تولدت رو انتخاب کن</b>\nتاریخ‌ها شمسی هستند.', reply_markup=months_keyboard(), parse_mode='HTML')
+    current = store.user(message.from_user.id)
+    if current and current['month'] and current['day']:
+        date = cal.birthday_text(current['month'], current['day'], current.get('birth_year'))
+        year_note = '' if current.get('birth_year') else '\nسال در ثبت قبلی ذخیره نشده؛ با تأیید، فقط سال را وارد می‌کنی.'
+        await message.answer(
+            f'{ui.emoji("birthday", "🎂")} <b>تاریخ تولد ثبت‌شده‌ات</b>\n{date}{year_note}\n\n'
+            'این تاریخ درسته؟', parse_mode='HTML', reply_markup=ui.inline([[
+                ui.button('✅ تأیید', 'mybirthday:confirm', 'success', key='on'),
+                ui.button('✏️ تغییر تاریخ تولد', 'mybirthday:change', 'primary', key='edit')
+            ]]))
+        return
+    await ask_birthday_year(message, state)
 
 
-@user_router.callback_query(F.data.in_({'set_birthday', 'back_to_months'}))
-async def months_handler(callback: CallbackQuery):
-    await callback.answer()
-    await callback.message.edit_text('🗓 ماه تولدت رو انتخاب کن 🌸', reply_markup=months_keyboard())
+async def ask_birthday_year(message, state, existing_month=None, existing_day=None):
+    if existing_month is not None and existing_day is not None:
+        await state.update_data(existing_birthday=True, existing_month=existing_month,
+                                existing_day=existing_day)
+    await state.set_state(MyBirthdayFlow.year)
+    await message.answer('سال تولدت رو با عدد وارد کن (شمسی؛ اعداد فارسی، عربی یا انگلیسی پذیرفته می‌شن).')
 
 
-@user_router.callback_query(F.data.startswith('month:'))
-async def month_handler(callback: CallbackQuery):
-    try:
-        month = int(callback.data.split(':')[1])
-        keyboard = days_keyboard(month)
-    except (ValueError, IndexError):
-        await callback.answer('تاریخ معتبر نیست.', show_alert=True)
+@user_router.callback_query(F.data == 'mybirthday:confirm')
+async def confirm_birthday(callback: CallbackQuery, state: FSMContext):
+    current = store.user(callback.from_user.id)
+    if not current or not current['month'] or not current['day']:
+        await callback.answer('تاریخی برای تأیید پیدا نشد.', show_alert=True)
+        return
+    if current.get('birth_year'):
+        await callback.answer('تاریخ تولدت تأیید شد.')
+        await callback.message.edit_text(
+            f'{ui.emoji("on", "✅")} تاریخ تولدت تأیید شد: '
+            f'<b>{cal.birthday_text(current["month"], current["day"], current["birth_year"])}</b>',
+            parse_mode='HTML', reply_markup=ui.inline([]))
         return
     await callback.answer()
-    await callback.message.edit_text(f'🌸 {cal.MONTHS[month-1]}\nحالا روز تولدت رو انتخاب کن 🎈', reply_markup=keyboard)
+    await state.update_data(existing_birthday=True, existing_month=current['month'],
+                            existing_day=current['day'])
+    await state.set_state(MyBirthdayFlow.year)
+    await callback.message.edit_text(
+        f'{ui.emoji("birthday", "🎂")} تاریخ ثبت‌شده: '
+        f'<b>{cal.birthday_text(current["month"], current["day"])}</b>\n'
+        'فقط سال شمسی تولدت رو با عدد بفرست تا به همین تاریخ اضافه بشه.', parse_mode='HTML',
+        reply_markup=ui.inline([]))
 
 
-async def save_birthday(message, uid, month, day, bot, notification=1):
-    changes = {'month': month, 'day': day}
+@user_router.callback_query(F.data == 'mybirthday:change')
+async def change_birthday(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.clear()
+    await state.set_state(MyBirthdayFlow.year)
+    await callback.message.edit_text(
+        'سال تولدت رو با عدد وارد کن (شمسی؛ اعداد فارسی، عربی یا انگلیسی پذیرفته می‌شن).',
+        reply_markup=ui.inline([]))
+
+
+@user_router.message(MyBirthdayFlow.year)
+async def my_birthday_year(message: Message, state: FSMContext, bot):
+    if await _cancel_flow(message, state):
+        return
+    try:
+        year = cal.parse_number(message.text)
+        if not 1 <= year <= cal.today().year:
+            raise ValueError
+    except ValueError:
+        await message.answer('سال تولد رو با عدد معتبر و نه در آینده وارد کن.')
+        return
+    data = await state.get_data()
+    if data.get('existing_birthday'):
+        month, day = data['existing_month'], data['existing_day']
+        try:
+            jdatetime.date(year, month, day)
+        except ValueError:
+            await message.answer('این روز در سالی که فرستادی وجود نداره. سال درست رو بفرست یا «تغییر تاریخ تولد» رو انتخاب کن.')
+            return
+        await state.clear()
+        await save_birthday(message, message.from_user.id, year, month, day, bot,
+                            notification=None)
+        return
+    await state.update_data(birthday_year=year)
+    await state.set_state(MyBirthdayFlow.month)
+    await message.answer('ماه تولدت رو با عدد وارد کن (۱ تا ۱۲).')
+
+
+@user_router.message(MyBirthdayFlow.month)
+async def my_birthday_month(message: Message, state: FSMContext):
+    if await _cancel_flow(message, state):
+        return
+    try:
+        month = cal.parse_number(message.text)
+        if not 1 <= month <= 12:
+            raise ValueError
+    except ValueError:
+        await message.answer('ماه رو با عددی بین ۱ تا ۱۲ وارد کن.')
+        return
+    await state.update_data(birthday_month=month)
+    await state.set_state(MyBirthdayFlow.day)
+    await message.answer('روز تولدت رو با عدد وارد کن.')
+
+
+@user_router.message(MyBirthdayFlow.day)
+async def my_birthday_day(message: Message, state: FSMContext, bot):
+    if await _cancel_flow(message, state):
+        return
+    data = await state.get_data()
+    try:
+        day = cal.parse_number(message.text)
+        jdatetime.date(data['birthday_year'], data['birthday_month'], day)
+    except (ValueError, TypeError, KeyError):
+        await message.answer('این روز در آن سال و ماه معتبر نیست؛ روز رو دوباره با عدد وارد کن.')
+        return
+    await state.clear()
+    current = store.user(message.from_user.id)
+    notification = None if current and current['month'] else 1
+    await save_birthday(message, message.from_user.id, data['birthday_year'],
+                        data['birthday_month'], day, bot, notification=notification)
+
+
+async def save_birthday(message, uid, year, month, day, bot, notification=1):
+    changes = {'birth_year': year, 'month': month, 'day': day}
     if notification is not None:
         changes['notification'] = notification
     store.update_user(uid, **changes)
     days = cal.remaining(month, day)
-    text = f'{ui.emoji("on", "✅")} <b>تولدت ثبت شد!</b>\n\n{ui.emoji("birthday", "🎂")} {cal.birthday_text(month, day)}\n'
+    text = f'{ui.emoji("on", "✅")} <b>تولدت ثبت شد!</b>\n\n{ui.emoji("birthday", "🎂")} {cal.birthday_text(month, day, year)}\n'
     text += f'{ui.emoji("birthday", "🎂")} امروز روز توئه؛ تولدت مبارک!' if days==0 else f'{ui.emoji("until", "⏳")} <b>{days} روز</b> تا جشن تولدت!'
     if message is None:
         await bot.send_message(uid, text, parse_mode='HTML', reply_markup=ui.home(uid))
     else:
         await message.answer(text, parse_mode='HTML', reply_markup=ui.home(uid))
-    await notify_admin(bot, f'🎂 تولد ثبت شد.\nشناسه: <code>{uid}</code>\n{cal.birthday_text(month,day)}', uid)
+    await notify_admin(bot, f'🎂 تولد ثبت شد.\nشناسه: <code>{uid}</code>\n{cal.birthday_text(month, day)}', uid)
 
 
+@user_router.callback_query(F.data.in_({'set_birthday', 'back_to_months'}))
+@user_router.callback_query(F.data.startswith('month:'))
 @user_router.callback_query(F.data.startswith('day:'))
-async def day_handler(callback: CallbackQuery, bot):
-    try:
-        _, month, day = callback.data.split(':')
-        month, day = int(month), int(day)
-        if not cal.valid_birthday(month, day):
-            raise ValueError()
-    except ValueError:
-        await callback.answer('تاریخ معتبر نیست.', show_alert=True)
-        return
-    await callback.answer('✅ ثبت شد')
-    await callback.message.edit_text('✅ تاریخ انتخاب‌شده ثبت شد.')
-    await save_birthday(callback.message, callback.from_user.id, month, day, bot)
+async def obsolete_birthday_keyboard(callback: CallbackQuery):
+    await callback.answer('برای ثبت تاریخ، دکمهٔ ثبت تولد را دوباره بزن و سال، ماه و روز را با عدد وارد کن.', show_alert=True)
 
 
 @user_router.callback_query(F.data == 'user:home')
@@ -600,14 +708,15 @@ async def home_callback(callback: CallbackQuery, state: FSMContext):
 @user_router.message(Command('setbirthday'))
 async def setbirthday_command(message: Message, bot):
     try:
-        _, month, day = message.text.split()
-        month, day = int(month), int(day)
-        if not cal.valid_birthday(month,day):
-            raise ValueError()
+        _, year, month, day = message.text.split()
+        year, month, day = map(cal.parse_number, (year, month, day))
+        if year > cal.today().year:
+            raise ValueError
+        jdatetime.date(year, month, day)
     except ValueError:
-        await message.answer('فرمت: /setbirthday ماه روز\nمثال: /setbirthday 1 25')
+        await message.answer('فرمت: /setbirthday سال ماه روز\nمثال شمسی: /setbirthday ۱۳۷۰ ۷ ۲۵')
         return
-    await save_birthday(message, message.from_user.id, month, day, bot)
+    await save_birthday(message, message.from_user.id, year, month, day, bot)
 
 
 @user_router.message(F.text.in_({ui.BTN_OFF, ui.BTN_ON}))
@@ -632,7 +741,7 @@ async def birthday_handler(message: Message):
         return
     since = message.text == ui.BTN_SINCE
     days = cal.elapsed(u['month'],u['day']) if since else cal.remaining(u['month'],u['day'])
-    text = f'{ui.emoji("birthday", "🎂")} <b>{cal.birthday_text(u["month"],u["day"])}</b>\n\n'
+    text = f'{ui.emoji("birthday", "🎂")} <b>{cal.birthday_text(u["month"], u["day"], u.get("birth_year"))}</b>\n\n'
     text += f'{ui.emoji("since", "📅")} {days} روز از آخرین تولدت گذشته.' if since else (f'{ui.emoji("birthday", "🎂")} تولدت مبارک! امروز روز توئه!' if days==0 else f'{ui.emoji("until", "⏳")} فقط <b>{days} روز</b> تا تولدت!')
     await message.answer(text, parse_mode='HTML', reply_markup=ui.home(message.from_user.id))
 
@@ -645,7 +754,7 @@ async def deletebirthday_handler(message: Message):
 
 @user_router.callback_query(F.data == 'user:delete')
 async def delete_callback(callback: CallbackQuery):
-    store.update_user(callback.from_user.id, month=None, day=None, notification=0)
+    store.update_user(callback.from_user.id, birth_year=None, month=None, day=None, notification=0)
     await callback.answer('حذف شد')
     await callback.message.edit_text('✅ تاریخ تولدت حذف شد.')
     await callback.message.answer('هر وقت خواستی، دوباره ثبتش کن 🎂', reply_markup=ui.home(callback.from_user.id))
@@ -698,8 +807,8 @@ async def _run_bot():
                 store.set_setting('custom_emoji', '0')
                 log.warning('Custom emoji lookup unavailable; using text without icons')
         try:
-            async def mini_app_birthday_saved(uid, month, day, notification):
-                await save_birthday(None, uid, month, day, bot, int(notification))
+            async def mini_app_birthday_saved(uid, year, month, day, notification):
+                await save_birthday(None, uid, year, month, day, bot, int(notification))
 
             api_runner = await webapp_api.start(mini_app_birthday_saved)
             log.info('Mini App profile API listening on %s:%s',

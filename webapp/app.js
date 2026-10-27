@@ -18,6 +18,12 @@
   let dateTouched=false;
   function applySavedBirthday(birthday){
     if(!birthday||dateTouched)return;
+    if(Number.isInteger(birthday.year)){
+      try{
+        const saved=DateCalendars.fromCalendar('persian',{year:birthday.year,month:birthday.month,day:birthday.day});
+        if(saved<=today){setDate(DateCalendars.toCalendar(calendar.value,saved));return;}
+      }catch{}
+    }
     let year=DateCalendars.toCalendar('persian',today).year;
     while(year>1){
       try{
@@ -32,8 +38,14 @@
     }
   }
   window.addEventListener('birthday-state',event=>applySavedBirthday(event.detail&&event.detail.birthday));
+  window.addEventListener('birthday-state',event=>{
+    if(!dateTouched)save.textContent=event.detail&&event.detail.birthday?'ذخیرهٔ تغییرات':'ثبت تاریخ تولدم';
+  });
+  window.addEventListener('birthday-change-requested',()=>{
+    dateTouched=true;save.textContent='ذخیرهٔ تغییرات';
+  });
   save.disabled=!canSave;
-  if(canSave)saveHint.textContent='سال برای بررسی تاریخ استفاده می‌شه و فقط ماه و روز ذخیره می‌شن.';
+  if(canSave)saveHint.textContent='سال، ماه و روز تولدت در حساب بات ذخیره می‌شن.';
   function todayParts(){return DateCalendars.toCalendar(calendar.value,today);}
   function setDate(date){
     dateParts={year:date.year,month:date.month,day:date.day};
@@ -124,7 +136,7 @@
       const currentPersianYear=DateCalendars.toCalendar('persian',today).year;
       save.disabled=!canSave||result.persian.year>currentPersianYear;
       if(result.persian.year>currentPersianYear&&canSave)saveHint.textContent='سال تولد نمی‌تونه در آینده باشه.';
-      else if(canSave)saveHint.textContent='سال فقط برای بررسی تاریخ استفاده می‌شه؛ بات ماه و روز رو نگه می‌داره.';
+      else if(canSave)saveHint.textContent='سال، ماه و روز تولدت در حساب بات ذخیره می‌شن.';
       save.dataset.persian=JSON.stringify(result.persian);
     }catch(e){
       for(const id of ['persian-result','gregorian-result','hijri-result'])$(id).textContent='—';
@@ -146,7 +158,7 @@
         try{body=responseText?JSON.parse(responseText):{};}catch{throw new Error(responseText||'پاسخ API قابل خواندن نیست؛ اتصال بات را بررسی کن.');}
         if(!response.ok)throw new Error(body.error||'ثبت انجام نشد.');
         saveHint.textContent='تاریخ تولدت ذخیره شد.';
-        save.textContent='ثبت تاریخ تولدم';
+        dateTouched=false;save.textContent='تأیید یا تغییر تاریخ تولد';
         save.disabled=false;
         window.dispatchEvent(new CustomEvent('birthday-saved'));
       }else{

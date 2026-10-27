@@ -7,6 +7,20 @@ import config
 
 MONTHS = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
           'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
+DIGIT_TRANSLATION = str.maketrans(
+    '۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩', '01234567890123456789')
+
+
+def parse_number(value):
+    """Parse a whole number written with English, Persian, or Arabic digits."""
+    text = str(value or '').strip().translate(DIGIT_TRANSLATION)
+    if not text or not text.isascii() or not text.isdigit():
+        raise ValueError('Enter digits only')
+    return int(text)
+
+
+def format_number(value):
+    return str(value).translate(str.maketrans('0123456789', '۰۱۲۳۴۵۶۷۸۹'))
 
 
 def local_now():
@@ -54,8 +68,9 @@ def elapsed(month, day):
     return (t - birthday).days
 
 
-def birthday_text(month, day):
-    return f'{day} {MONTHS[month - 1]}'
+def birthday_text(month, day, year=None):
+    date = f'{day} {MONTHS[month - 1]}'
+    return f'{date} {year}' if year is not None else date
 
 
 def stat_boundaries():

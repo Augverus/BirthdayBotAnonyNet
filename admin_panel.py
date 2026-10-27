@@ -281,7 +281,7 @@ async def admin_callback(callback: CallbackQuery, state: FSMContext, bot):
         store.audit(aid, 'stop_send', jid)
         await callback.message.answer('✖️ ارسال‌های باقی‌مانده متوقف شدند؛ پیام‌های ارسال‌شده باقی می‌مانند.')
     elif action == 'settings':
-        switches = [('maintenance', '🚧 توقف خدمات کاربران', '0'), ('reminders_enabled', '🔔 یادآوری روزانه', '0'),
+        switches = [('maintenance', '🚧 توقف خدمات کاربران', '0'), ('reminders_enabled', '🔔 یادآوری تولد و ۱۰، ۷، ۳ روز قبل', '1'),
                     ('notify_admin', '🔔 خبر ورود کاربران', '0'), ('group_reading', '👁 دریافت پیام گروه', '1'), ('custom_emoji', '✨ ایموجی پریمیوم', '0')]
         rows = [[ui.button(f'{label}: {"روشن" if store.setting(key, default)=="1" else "خاموش"}', f'adm:toggle:{key}')]
                 for key, label, default in switches]
@@ -294,7 +294,7 @@ async def admin_callback(callback: CallbackQuery, state: FSMContext, bot):
             'ایموجی پریمیوم به مجوز تلگرام برای بات وابسته است؛ در صورت خطا آیکن حذف می‌شود و متن باقی می‌ماند.', ui.inline(rows))
     elif action == 'toggle':
         key = parts[2]
-        defaults = {'maintenance':'0', 'reminders_enabled':'0', 'notify_admin':'0', 'group_reading':'1', 'custom_emoji':'0'}
+        defaults = {'maintenance':'0', 'reminders_enabled':'1', 'notify_admin':'0', 'group_reading':'1', 'custom_emoji':'0'}
         if key not in defaults:
             return
         store.set_setting(key, '0' if store.setting(key, defaults[key]) == '1' else '1')

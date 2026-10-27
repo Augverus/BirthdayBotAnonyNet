@@ -70,7 +70,7 @@ def init():
         CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT);
         CREATE TABLE IF NOT EXISTS bot_users(
             id INTEGER PRIMARY KEY, name TEXT NOT NULL DEFAULT '', username TEXT,
-            first_seen TEXT, last_seen TEXT, month INTEGER, day INTEGER,
+            first_seen TEXT, last_seen TEXT, month INTEGER, day INTEGER, birth_year INTEGER,
             notification INTEGER NOT NULL DEFAULT 1, blocked INTEGER NOT NULL DEFAULT 0,
             banned INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS bot_admins(id INTEGER PRIMARY KEY);
@@ -95,7 +95,7 @@ def init():
             user_id INTEGER, day TEXT, PRIMARY KEY(user_id,day));
         CREATE TABLE IF NOT EXISTS bot_friend_birthdays(
             id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER NOT NULL,
-            name TEXT NOT NULL, month INTEGER NOT NULL, day INTEGER NOT NULL,
+            name TEXT NOT NULL, month INTEGER NOT NULL, day INTEGER NOT NULL, year INTEGER,
             notification INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS bot_friend_birthdays_owner
             ON bot_friend_birthdays(owner_id,month,day,id);
@@ -115,10 +115,21 @@ def init():
         CREATE INDEX IF NOT EXISTS bot_deliveries_pending_job ON bot_deliveries(job_id,user_id)
             WHERE status='pending';
         ''')
+        # Add year columns to existing databases without replacing or rewriting
+        # any birthday rows. Old dates remain usable with a NULL year.
+        migrations = (
+            ('bot_users', 'birth_year', 'INTEGER'),
+            ('bot_friend_birthdays', 'year', 'INTEGER'),
+        )
+        for table, column, sql_type in migrations:
+            columns = {row['name'] for row in c.execute(f'PRAGMA table_info({table})')}
+            if column not in columns:
+                c.execute(f'ALTER TABLE {table} ADD COLUMN {column} {sql_type}')
         if not c.execute("SELECT 1 FROM settings WHERE key='runtime_migrated'").fetchone():
             _import_legacy_users(c)
             c.execute("INSERT INTO settings(key,value) VALUES('runtime_migrated','1')")
         c.execute("INSERT OR IGNORE INTO settings(key,value) VALUES('custom_emoji','1')")
+        c.execute("INSERT OR IGNORE INTO settings(key,value) VALUES('reminders_enabled','1')")
 
 
 def _valid_legacy_birthday(month, day):
@@ -280,23 +291,25 @@ def users_to_remind(day):
             ORDER BY u.id''', (day,))]
 
 
-def add_friend_birthday(owner_id, name, month, day, notification=True):
+def add_friend_birthday(owner_id, name, month, day, notification=True, year=None):
     name = ' '.join(str(name).split())
     if not name or len(name) > 80 or not 1 <= month <= 12 or not 1 <= day <= 31:
         raise ValueError('Invalid friend birthday')
+    if year is not None and (type(year) is not int or year < 1):
+        raise ValueError('Invalid friend birthday year')
     with connection() as c:
         count = c.execute('SELECT COUNT(*) FROM bot_friend_birthdays WHERE owner_id=?',
                            (owner_id,)).fetchone()[0]
         if count >= 50:
             return None
         return c.execute('''INSERT INTO bot_friend_birthdays
-            (owner_id,name,month,day,notification,created_at) VALUES(?,?,?,?,?,?)''',
-            (owner_id, name, month, day, int(bool(notification)), now())).lastrowid
+            (owner_id,name,month,day,year,notification,created_at) VALUES(?,?,?,?,?,?,?)''',
+            (owner_id, name, month, day, year, int(bool(notification)), now())).lastrowid
 
 
 def friend_birthdays(owner_id):
     with connection() as c:
-        return [dict(r) for r in c.execute('''SELECT id,name,month,day,notification
+        return [dict(r) for r in c.execute('''SELECT id,name,month,day,year,notification
             FROM bot_friend_birthdays WHERE owner_id=? ORDER BY month,day,name COLLATE NOCASE,id''',
             (owner_id,))]
 
@@ -315,9 +328,19 @@ def friend_birthdays_on(month, day):
             ORDER BY f.owner_id,f.name COLLATE NOCASE''', (month, day))]
 
 
+def friend_birthdays_to_remind():
+    """Return enabled friends belonging to users who can receive reminders."""
+    with connection() as c:
+        return [dict(r) for r in c.execute('''SELECT f.owner_id,f.name,f.month,f.day,f.year,
+                u.blocked,u.banned FROM bot_friend_birthdays f
+            LEFT JOIN bot_users u ON u.id=f.owner_id
+            WHERE f.notification=1 AND COALESCE(u.blocked,0)=0 AND COALESCE(u.banned,0)=0
+            ORDER BY f.owner_id,f.name COLLATE NOCASE''')]
+
+
 def friend_birthday(owner_id, friend_id):
     with connection() as c:
-        row = c.execute('''SELECT id,name,month,day,notification FROM bot_friend_birthdays
+        row = c.execute('''SELECT id,name,month,day,year,notification FROM bot_friend_birthdays
             WHERE owner_id=? AND id=?''', (owner_id, friend_id)).fetchone()
         return dict(row) if row else None
 
@@ -355,7 +378,7 @@ def mark_friend_reminder(owner_id, day):
 
 
 def update_user(uid, **values):
-    allowed = {'month', 'day', 'notification', 'blocked', 'banned'}
+    allowed = {'month', 'day', 'birth_year', 'notification', 'blocked', 'banned'}
     if not values or not set(values) <= allowed:
         raise ValueError('Invalid user fields')
     with connection() as c:

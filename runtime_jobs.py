@@ -138,18 +138,31 @@ async def reminder_worker(bot):
             last_pruned_day = day_key
         hour, minute = map(int, store.setting('reminder_time', f'{config.REMINDER_HOUR:02}:{config.REMINDER_MINUTE:02}').split(':'))
         if store.setting('reminders_enabled', '0') == '1' and (t.hour, t.minute) >= (hour, minute):
-            # One consolidated annual birthday note per owner, even when several
-            # friends share the same date. Each owner has an independent marker.
+            reminder_days = {0, 3, 7, 10}
+            # Group all friends whose birthday is due today or in 3, 7, or 10
+            # days so an owner receives at most one friend reminder per day.
             friend_groups = {}
-            for friend in store.friend_birthdays_on(cal.today().month, cal.today().day):
-                if friend['blocked'] or friend['banned']:
+            for friend in store.friend_birthdays_to_remind():
+                try:
+                    days = cal.remaining(friend['month'], friend['day'])
+                except (TypeError, ValueError):
+                    log.warning('Skipping invalid saved birthday for friend of user %s', friend['owner_id'])
                     continue
-                friend_groups.setdefault(friend['owner_id'], []).append(friend['name'])
-            for owner_id, names in friend_groups.items():
+                if days not in reminder_days:
+                    continue
+                friend_groups.setdefault(friend['owner_id'], []).append((friend, days))
+            for owner_id, birthdays in friend_groups.items():
                 if store.friend_reminder_sent(owner_id, day_key):
                     continue
-                people = ', '.join(f'<b>{escape(name)}</b>' for name in names)
-                text = f'{ui.emoji("birthday", "🎂")} امروز تولد {people} است!'
+                lines = []
+                for friend, days in birthdays:
+                    name = f'<b>{escape(friend["name"])}</b>'
+                    date = cal.birthday_text(friend['month'], friend['day'], friend.get('year'))
+                    if days == 0:
+                        lines.append(f'{ui.emoji("birthday", "🎂")} امروز تولد {name} است! ({date})')
+                    else:
+                        lines.append(f'{ui.emoji("until", "⏳")} {days} روز تا تولد {name} مانده ({date})')
+                text = '\n'.join(lines)
                 try:
                     await send_slot(bot)
                     await bot.send_message(owner_id, text, parse_mode='HTML')
@@ -164,8 +177,18 @@ async def reminder_worker(bot):
                 else:
                     store.mark_friend_reminder(owner_id, day_key)
             for u in store.users_to_remind(day_key):
-                days = cal.remaining(u['month'], u['day'])
-                text = f'{ui.emoji("birthday", "🎂")} تولدت مبارک! امروز روز توئه!' if days == 0 else f'{ui.emoji("until", "⏳")} {days} روز تا تولدت مونده!\n{ui.emoji("birthday", "🎂")} {cal.birthday_text(u["month"], u["day"])}'
+                try:
+                    days = cal.remaining(u['month'], u['day'])
+                except (TypeError, ValueError):
+                    log.warning('Skipping invalid saved birthday for user %s', u['id'])
+                    continue
+                if days not in reminder_days:
+                    continue
+                if days == 0:
+                    text = f'{ui.emoji("birthday", "🎂")} تولدت مبارک! امروز روز توئه!'
+                else:
+                    date = cal.birthday_text(u['month'], u['day'], u.get('birth_year'))
+                    text = f'{ui.emoji("until", "⏳")} {days} روز تا تولدت مونده!\n{ui.emoji("birthday", "🎂")} {date}'
                 try:
                     await send_slot(bot)
                     await bot.send_message(u['id'], text, parse_mode='HTML')

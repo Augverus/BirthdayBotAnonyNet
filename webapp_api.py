@@ -81,11 +81,12 @@ async def _json_payload(request):
     return payload if isinstance(payload, dict) else None
 
 
-def _birthday_record(month, day, notification=None):
+def _birthday_record(year, month, day, notification=None):
     record = {
+        "year": year,
         "month": month,
         "day": day,
-        "date": cal.birthday_text(month, day),
+        "date": cal.birthday_text(month, day, year),
         "days_remaining": cal.remaining(month, day),
     }
     if notification is not None:
@@ -97,9 +98,10 @@ def _friend_record(row):
     return {
         "id": row["id"],
         "name": row["name"],
+        "year": row.get("year"),
         "month": row["month"],
         "day": row["day"],
-        "date": cal.birthday_text(row["month"], row["day"]),
+        "date": cal.birthday_text(row["month"], row["day"], row.get("year")),
         "days_remaining": cal.remaining(row["month"], row["day"]),
         "notification": bool(row["notification"]),
     }
@@ -123,7 +125,8 @@ async def dashboard(request):
     record = store.user(telegram_user.id)
     birthday = None
     if record and record["month"] and record["day"]:
-        birthday = _birthday_record(record["month"], record["day"], record["notification"])
+        birthday = _birthday_record(record.get("birth_year"), record["month"], record["day"],
+                                     record["notification"])
     friends = [_friend_record(row) for row in store.friend_birthdays(telegram_user.id)]
     return web.json_response({"profile": _profile(telegram_user), "birthday": birthday, "friends": friends})
 
@@ -168,16 +171,17 @@ async def save_birthday(request):
         return _json_error(400, "تاریخ تولد در این سال معتبر نیست.")
     if not user_record:
         return _json_error(404, "اول ربات را در تلگرام استارت کن.")
-    store.update_user(telegram_user.id, month=month, day=day, notification=int(notification))
+    store.update_user(telegram_user.id, birth_year=year, month=month, day=day,
+                      notification=int(notification))
     callback = request.app.get("on_birthday_saved")
     if callback:
         try:
-            await callback(telegram_user.id, month, day, notification)
+            await callback(telegram_user.id, year, month, day, notification)
         except Exception:
             # The birthday is already safely stored; a Telegram notification failure
             # must not turn a successful save into a retry that consumes the rate limit.
             pass
-    return web.json_response({"birthday": _birthday_record(month, day, notification)})
+    return web.json_response({"birthday": _birthday_record(year, month, day, notification)})
 
 
 async def add_friend(request):
@@ -188,19 +192,24 @@ async def add_friend(request):
     if payload is None:
         return _json_error(400, "اطلاعات فرم درست نیست.")
     name = " ".join(str(payload.get("name", "")).split())
+    year = payload.get("year")
     month = payload.get("month")
     day = payload.get("day")
     notification = payload.get("notification", True)
-    if not name or len(name) > 80 or not _valid_month_day(month, day) or not isinstance(notification, bool):
+    if (not name or len(name) > 80 or type(year) is not int or year < 1
+            or year > cal.today().year or not _valid_month_day(month, day)
+            or not isinstance(notification, bool)):
         return _json_error(400, "نام یا تاریخ تولد را بررسی کن.")
     try:
-        friend_id = store.add_friend_birthday(telegram_user.id, name, month, day, notification)
-    except ValueError:
+        jdatetime.date(year, month, day)
+        friend_id = store.add_friend_birthday(telegram_user.id, name, month, day,
+                                              notification, year=year)
+    except (ValueError, TypeError):
         return _json_error(400, "تاریخ تولد معتبر نیست.")
     if friend_id is None:
         return _json_error(409, "تا ۵۰ تولد می‌توانی ثبت کنی.")
     return web.json_response({"friend": _friend_record({
-        "id": friend_id, "name": name, "month": month, "day": day,
+        "id": friend_id, "name": name, "year": year, "month": month, "day": day,
         "notification": int(notification),
     })}, status=201)
 

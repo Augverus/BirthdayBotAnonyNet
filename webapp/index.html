@@ -80,7 +80,7 @@
   </script>
   <script src="./api-config.js"></script>
   <script src="./calendar.js?v=20261018-7"></script>
-  <script defer src="./app.js?v=20261018-7"></script>
+  <script defer src="./app.js?v=20261027-1"></script>
   <style>
     :root { color-scheme: dark; --bg: #0D0A14; --fg: #F7F2FF; --muted: #B4A9C8; --card: #171321; --accent: #8B6CF6; --accent-dark: #A994FF; --accentText: #FFFFFF; --line: #392F4B; }
     * { box-sizing: border-box; }
@@ -121,6 +121,8 @@
     .birthday-box strong { color: var(--accent-dark); }
     .birthday-box span { color: var(--muted); font-size: .88rem; }
     .countdown { flex: 0 0 auto; color: var(--fg); font-weight: 750; text-align: left; }
+    .birthday-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 10px; }
+    .birthday-actions button { min-height: 44px; padding: 8px 10px; font-size: .83rem; }
     .status { margin-top: 10px; color: var(--muted); font-size: .82rem; }
     .card { padding: 19px; margin: 0 0 16px; }
     .section-heading { margin: 0 0 14px; }
@@ -175,6 +177,9 @@
     .empty-state { padding: 15px 10px; color: var(--muted); text-align: center; }
     .friend-form { margin-top: 13px; padding: 14px; border: 1px solid var(--line); border-radius: 18px; background: #211B2D; }
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .friend-date-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .friend-year-field { grid-column: 1 / -1; }
+    .friend-date-grid select { padding-inline: 7px; }
     .form-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 13px; }
     .check-row { display: flex; align-items: center; gap: 9px; margin-top: 10px; color: var(--muted); font-size: .9rem; }
     .check-row input { width: 18px; min-height: 18px; accent-color: var(--accent); }
@@ -298,6 +303,10 @@
         <div><strong><svg class="visual-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14v9H5zM3 12h18M12 12v9M12 12c-4 0-5-2-5-4 3 0 5 1 5 4zm0 0c0-3 2-5 5-5 0 3-2 5-5 5z"/></svg> تولد من</strong><span id="my-birthday">در حال بارگذاری…</span></div>
         <div class="countdown" id="my-countdown"></div>
       </div>
+      <div class="birthday-actions" id="birthday-actions" hidden>
+        <button class="secondary" id="confirm-birthday" type="button">✓ تأیید تاریخ</button>
+        <button class="primary" id="change-birthday" type="button">✎ تغییر تاریخ تولد</button>
+      </div>
       <div class="status" id="api-status" aria-live="polite"></div>
     </section>
 
@@ -353,11 +362,12 @@
       <form class="friend-form" id="friend-form" hidden>
         <label for="friend-name">اسمش چیه؟</label>
         <input id="friend-name" name="name" type="text" maxlength="80" autocomplete="off" required placeholder="مثلاً نازنین">
-        <div class="form-grid" style="margin-top: 11px">
+        <div class="form-grid friend-date-grid" style="margin-top: 11px">
+          <div class="friend-year-field"><label for="friend-year">سال تولد (شمسی)</label><select id="friend-year" name="year" required></select></div>
           <div><label for="friend-month">ماه تولد</label><select id="friend-month" name="month" required></select></div>
           <div><label for="friend-day">روز تولد</label><select id="friend-day" name="day" required></select></div>
         </div>
-        <label class="check-row"><input id="friend-notification" type="checkbox" checked> روز تولدش بهم یادآوری کن</label>
+        <label class="check-row"><input id="friend-notification" type="checkbox" checked> روز تولد و ۱۰، ۷ و ۳ روز قبل یادآوری کن</label>
         <div class="form-actions">
           <button class="primary" type="submit">ثبت تولد</button>
           <button class="secondary" id="cancel-friend" type="button">بی‌خیال</button>
@@ -384,10 +394,14 @@
       const initUser = app && app.initDataUnsafe && app.initDataUnsafe.user;
       const numberFa = new Intl.NumberFormat('fa-IR');
       const months = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'];
+      const currentSerial = DateCalendars.todaySerial();
+      const currentSolarYear = DateCalendars.toCalendar('persian', currentSerial).year;
+      const solarYearRange = DateCalendars.calendarRange('persian');
       const status = document.getElementById('api-status');
       const friendsList = document.getElementById('friends-list');
       const birthdayText = document.getElementById('my-birthday');
       const countdownText = document.getElementById('my-countdown');
+      const birthdayActions = document.getElementById('birthday-actions');
       const form = document.getElementById('friend-form');
       const formStatus = document.getElementById('form-status');
 
@@ -476,13 +490,15 @@
         window.currentBirthday = birthday || null;
         window.dispatchEvent(new CustomEvent('birthday-state', { detail: { birthday } }));
         if (!birthday) {
+          birthdayActions.hidden = true;
           birthdayText.textContent = 'تولدت هنوز توی بات ثبت نشده.';
           countdownText.textContent = '';
           document.getElementById('home-birthday').textContent = 'تولدت هنوز ثبت نشده.';
           document.getElementById('home-countdown').textContent = '';
           return;
         }
-        birthdayText.textContent = `${numberFa.format(birthday.day)} ${months[birthday.month - 1]}`;
+        birthdayActions.hidden = false;
+        birthdayText.textContent = `${numberFa.format(birthday.day)} ${months[birthday.month - 1]}${Number.isInteger(birthday.year) ? ' ' + numberFa.format(birthday.year) : ''}`;
         document.getElementById('home-birthday').textContent = birthdayText.textContent;
         if (birthday.days_remaining === 0) setIconLabel(countdownText, 'celebrate', 'امروز روز توئه');
         else countdownText.textContent = `${numberFa.format(birthday.days_remaining)} روز مونده`;
@@ -509,7 +525,7 @@
           name.textContent = friend.name;
           const date = document.createElement('div');
           date.className = 'friend-date';
-          date.textContent = `${numberFa.format(friend.day)} ${months[friend.month - 1]}`;
+          date.textContent = `${numberFa.format(friend.day)} ${months[friend.month - 1]}${Number.isInteger(friend.year) ? ' ' + numberFa.format(friend.year) : ''}`;
           const days = document.createElement('div');
           days.className = 'friend-days';
           if (friend.days_remaining === 0) setIconLabel(days, 'celebrate', 'امروز تولدشه');
@@ -575,11 +591,25 @@
       }
 
       showProfile(initUser);
+      document.getElementById('confirm-birthday').addEventListener('click', () => {
+        if (!window.currentBirthday) return;
+        if (!Number.isInteger(window.currentBirthday.year)) {
+          setStatus('این تاریخ از ثبت قدیمی بازیابی شده و سال ندارد؛ برای تکمیل سال، «تغییر تاریخ تولد» را بزن.', true);
+          return;
+        }
+        setStatus('تاریخ تولد ذخیره‌شده‌ات تأیید شد.');
+        if (app && app.HapticFeedback) app.HapticFeedback.notificationOccurred('success');
+      });
+      document.getElementById('change-birthday').addEventListener('click', () => {
+        openPanel('converter');
+        window.dispatchEvent(new Event('birthday-change-requested'));
+      });
       window.addEventListener('birthday-saved', () => loadDashboard());
       loadDashboard();
 
       const monthSelect = document.getElementById('friend-month');
       const daySelect = document.getElementById('friend-day');
+      const yearSelect = document.getElementById('friend-year');
       function fillMonths(select) {
         months.forEach((month, index) => {
           const option = document.createElement('option');
@@ -588,26 +618,46 @@
           select.append(option);
         });
       }
-      function bindDayOptions(monthSelect, daySelect) {
+      function bindDayOptions(yearSelect, monthSelect, daySelect) {
         function updateDays() {
+          const year = Number(yearSelect.value || currentSolarYear);
           const month = Number(monthSelect.value || 1);
-          const maxDay = month <= 6 ? 31 : 30;
           const previous = Number(daySelect.value || 1);
           daySelect.replaceChildren();
-          for (let day = 1; day <= maxDay; day++) {
-            const option = document.createElement('option');
-            option.value = String(day);
-            option.textContent = numberFa.format(day);
-            daySelect.append(option);
+          const validDays = [];
+          for (let day = 1; day <= 31; day++) {
+            try {
+              DateCalendars.fromCalendar('persian', { year, month, day });
+              validDays.push(day);
+            } catch { /* This date does not exist in the selected Solar Hijri year. */ }
           }
-          daySelect.value = String(Math.min(previous, maxDay));
+          for (const day of validDays) {
+              const option = document.createElement('option');
+              option.value = String(day);
+              option.textContent = numberFa.format(day);
+              daySelect.append(option);
+          }
+          daySelect.value = String(validDays.includes(previous) ? previous : validDays[validDays.length - 1]);
         }
         monthSelect.addEventListener('change', updateDays);
+        yearSelect.addEventListener('change', updateDays);
         updateDays();
         return updateDays;
       }
       fillMonths(monthSelect);
-      const updateDays = bindDayOptions(monthSelect, daySelect);
+      const yearPlaceholder = document.createElement('option');
+      yearPlaceholder.value = '';
+      yearPlaceholder.textContent = 'سال را انتخاب کن';
+      yearPlaceholder.disabled = true;
+      yearPlaceholder.selected = true;
+      yearSelect.append(yearPlaceholder);
+      for (let year = currentSolarYear; year >= solarYearRange.minYear; year--) {
+        const option = document.createElement('option');
+        option.value = String(year);
+        option.textContent = numberFa.format(year);
+        yearSelect.append(option);
+      }
+      const updateDays = bindDayOptions(yearSelect, monthSelect, daySelect);
       document.getElementById('add-friend-button').addEventListener('click', () => {
         form.hidden = !form.hidden;
         formStatus.textContent = '';
@@ -630,6 +680,7 @@
             method: 'POST',
             body: JSON.stringify({
               name: document.getElementById('friend-name').value,
+              year: Number(yearSelect.value),
               month: Number(monthSelect.value),
               day: Number(daySelect.value),
               notification: document.getElementById('friend-notification').checked
