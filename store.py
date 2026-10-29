@@ -72,7 +72,8 @@ def init():
             id INTEGER PRIMARY KEY, name TEXT NOT NULL DEFAULT '', username TEXT,
             first_seen TEXT, last_seen TEXT, month INTEGER, day INTEGER, birth_year INTEGER,
             notification INTEGER NOT NULL DEFAULT 1, blocked INTEGER NOT NULL DEFAULT 0,
-            banned INTEGER NOT NULL DEFAULT 0);
+            banned INTEGER NOT NULL DEFAULT 0,
+            friend_notifications INTEGER NOT NULL DEFAULT 1);
         CREATE TABLE IF NOT EXISTS bot_admins(id INTEGER PRIMARY KEY);
         CREATE TABLE IF NOT EXISTS bot_events(
             event_key TEXT PRIMARY KEY, user_id INTEGER, kind TEXT, created_at TEXT);
@@ -119,6 +120,7 @@ def init():
         # any birthday rows. Old dates remain usable with a NULL year.
         migrations = (
             ('bot_users', 'birth_year', 'INTEGER'),
+            ('bot_users', 'friend_notifications', 'INTEGER NOT NULL DEFAULT 1'),
             ('bot_friend_birthdays', 'year', 'INTEGER'),
         )
         for table, column, sql_type in migrations:
@@ -334,7 +336,8 @@ def friend_birthdays_to_remind():
         return [dict(r) for r in c.execute('''SELECT f.owner_id,f.name,f.month,f.day,f.year,
                 u.blocked,u.banned FROM bot_friend_birthdays f
             LEFT JOIN bot_users u ON u.id=f.owner_id
-            WHERE f.notification=1 AND COALESCE(u.blocked,0)=0 AND COALESCE(u.banned,0)=0
+            WHERE f.notification=1 AND COALESCE(u.friend_notifications,1)=1
+              AND COALESCE(u.blocked,0)=0 AND COALESCE(u.banned,0)=0
             ORDER BY f.owner_id,f.name COLLATE NOCASE''')]
 
 
@@ -366,6 +369,27 @@ def toggle_friend_notification(owner_id, friend_id):
         return value
 
 
+def set_friend_reminders(owner_id, enabled):
+    """Set the user's master switch for friends' and family's birthday reminders."""
+    with connection() as c:
+        result = c.execute('UPDATE bot_users SET friend_notifications=? WHERE id=?',
+                           (int(bool(enabled)), owner_id))
+        return result.rowcount == 1
+
+
+def toggle_friend_reminders(owner_id):
+    """Flip the user's master switch for friends' and family's reminders."""
+    with connection() as c:
+        row = c.execute('SELECT friend_notifications FROM bot_users WHERE id=?',
+                        (owner_id,)).fetchone()
+        if not row:
+            return None
+        value = 0 if row['friend_notifications'] else 1
+        c.execute('UPDATE bot_users SET friend_notifications=? WHERE id=?',
+                  (value, owner_id))
+        return value
+
+
 def friend_reminder_sent(owner_id, day):
     with connection() as c:
         return c.execute('SELECT 1 FROM bot_friend_reminders WHERE owner_id=? AND day=?',
@@ -378,7 +402,8 @@ def mark_friend_reminder(owner_id, day):
 
 
 def update_user(uid, **values):
-    allowed = {'month', 'day', 'birth_year', 'notification', 'blocked', 'banned'}
+    allowed = {'month', 'day', 'birth_year', 'notification', 'friend_notifications',
+               'blocked', 'banned'}
     if not values or not set(values) <= allowed:
         raise ValueError('Invalid user fields')
     with connection() as c:

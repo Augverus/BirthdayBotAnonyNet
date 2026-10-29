@@ -321,20 +321,31 @@ FRIENDS_PAGE_SIZE = 5
 
 def friends_listing(uid, offset=0):
     rows = store.friend_birthdays(uid)
+    user = store.user(uid)
+    master_notifications = bool(user['friend_notifications']) if user else True
+    master_button = ui.button(
+        '🔕 خاموش کردن یادآوری عزیزان' if master_notifications else '🔔 روشن کردن یادآوری عزیزان',
+        'friend:toggle_all', 'danger' if master_notifications else 'success',
+        key='off' if master_notifications else 'on')
     if not rows:
         return ((f'{ui.emoji("birthday", "🎂")} <b>تولد عزیزان</b>\n\nهنوز تولدی ثبت نکرده‌ای.\n'
                  'با افزودن تاریخ تولد عزیزانت، روز تولدشان را فراموش نکن.'),
-                ui.inline([[ui.button('➕ افزودن تولد', 'friend:add', 'success')]]))
+                ui.inline([[master_button], [ui.button('➕ افزودن تولد', 'friend:add', 'success')]]))
     offset = max(0, min(int(offset), (len(rows) - 1) // FRIENDS_PAGE_SIZE * FRIENDS_PAGE_SIZE))
     page = rows[offset:offset + FRIENDS_PAGE_SIZE]
     digits = str.maketrans('0123456789', '۰۱۲۳۴۵۶۷۸۹')
-    lines = [f'{ui.emoji("birthday", "🎂")} <b>تولد عزیزان</b>']
-    buttons = []
+    lines = [f'{ui.emoji("birthday", "🎂")} <b>تولد عزیزان</b>',
+             f'{ui.emoji("on" if master_notifications else "off", "🔔" if master_notifications else "🔕")} '
+             f'یادآوری کلی: {"روشن" if master_notifications else "خاموش"}']
+    buttons = [[master_button]]
     for row in page:
         days_left = cal.remaining(row['month'], row['day'])
         days = str(days_left).translate(digits)
         timing = f'{ui.emoji("birthday", "🎂")} امروز تولدشه!' if days_left == 0 else f'{ui.emoji("until", "⏳")} {days} روز تا تولدش مانده'
-        reminder = f'{ui.emoji("on", "🔔")} یادآوری روشن' if row['notification'] else f'{ui.emoji("off", "🔕")} یادآوری خاموش'
+        if not master_notifications:
+            reminder = f'{ui.emoji("off", "🔕")} یادآوری کلی عزیزان خاموش است'
+        else:
+            reminder = f'{ui.emoji("on", "🔔")} یادآوری روشن' if row['notification'] else f'{ui.emoji("off", "🔕")} یادآوری خاموش'
         lines.append(f"<b>{escape(row['name'])}</b> — {cal.birthday_text(row['month'], row['day'], row.get('year'))}\n{timing} · {reminder}")
         buttons.append([
             ui.button('🔕 خاموش کردن یادآوری' if row['notification'] else '🔔 روشن کردن یادآوری',
@@ -519,6 +530,17 @@ async def friend_toggle(callback: CallbackQuery):
     await callback.message.edit_text(text, parse_mode='HTML', reply_markup=keyboard)
 
 
+@user_router.callback_query(F.data == 'friend:toggle_all')
+async def friend_toggle_all(callback: CallbackQuery):
+    state = store.toggle_friend_reminders(callback.from_user.id)
+    if state is None:
+        await callback.answer('اول ربات را در گفتگوی خصوصی استارت کن.', show_alert=True)
+        return
+    await callback.answer('🔔 یادآوری تولد عزیزان روشن شد.' if state else '🔕 یادآوری تولد عزیزان خاموش شد.')
+    text, keyboard = friends_listing(callback.from_user.id)
+    await callback.message.edit_text(text, parse_mode='HTML', reply_markup=keyboard)
+
+
 @user_router.callback_query(F.data.startswith('friend:delete:'))
 async def friend_delete(callback: CallbackQuery):
     parsed = parse_friend_reference(callback.data)
@@ -542,7 +564,7 @@ async def help_handler(message: Message):
 /mybirthday — شمارش معکوس تولد خودت
 /setbirthday سال ماه روز — ثبت تاریخ شمسی با عدد فارسی، عربی یا انگلیسی
 /deletebirthday — حذف تولد خودت
-/friends — دیدن تولدهای عزیزان
+/friends — دیدن تولدهای عزیزان و روشن/خاموش کردن یادآوری کلی یا هر نفر
 /id — شناسه عددی
 /cancel — لغو عملیات
 /admin — پنل مدیران''')

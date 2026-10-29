@@ -128,7 +128,12 @@ async def dashboard(request):
         birthday = _birthday_record(record.get("birth_year"), record["month"], record["day"],
                                      record["notification"])
     friends = [_friend_record(row) for row in store.friend_birthdays(telegram_user.id)]
-    return web.json_response({"profile": _profile(telegram_user), "birthday": birthday, "friends": friends})
+    return web.json_response({
+        "profile": _profile(telegram_user),
+        "birthday": birthday,
+        "friends": friends,
+        "friend_reminders_enabled": bool(record["friend_notifications"]) if record else True,
+    })
 
 
 async def set_birthday_notification(request):
@@ -145,6 +150,19 @@ async def set_birthday_notification(request):
         return _json_error(404, "اول ربات را در تلگرام استارت کن.")
     store.update_user(telegram_user.id, notification=int(notification))
     return web.json_response({"notification": notification})
+
+
+async def set_friend_reminders(request):
+    telegram_user = _telegram_user(request)
+    if not store.claim_rate_limit(telegram_user.id, "miniapp_friend_reminders", 2):
+        return _json_error(429, "یک لحظه صبر کن و دوباره امتحان کن.")
+    payload = await _json_payload(request)
+    enabled = payload.get("enabled") if payload else None
+    if not isinstance(enabled, bool):
+        return _json_error(400, "اطلاعات فرم درست نیست.")
+    if not store.set_friend_reminders(telegram_user.id, enabled):
+        return _json_error(404, "اول ربات را در تلگرام استارت کن.")
+    return web.json_response({"friend_reminders_enabled": enabled})
 
 
 async def save_birthday(request):
@@ -254,6 +272,7 @@ def create_app(on_birthday_saved=None):
     app.router.add_get("/api/dashboard", dashboard)
     app.router.add_post("/api/birthday", save_birthday)
     app.router.add_patch("/api/birthday/notification", set_birthday_notification)
+    app.router.add_patch("/api/friend-reminders", set_friend_reminders)
     app.router.add_post("/api/friends", add_friend)
     app.router.add_patch("/api/friends/{friend_id}", update_friend)
     app.router.add_delete("/api/friends/{friend_id}", delete_friend)

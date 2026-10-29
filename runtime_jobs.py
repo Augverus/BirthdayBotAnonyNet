@@ -14,6 +14,23 @@ import store
 import ui
 
 log = logging.getLogger(__name__)
+REMINDER_DAYS = {0, 3, 7, 10}
+
+
+def _message_chunks(lines, limit=3800):
+    """Split batched reminder text into Telegram-safe HTML message sizes."""
+    chunks = []
+    current = ''
+    for line in lines:
+        candidate = f'{current}\n{line}' if current else line
+        if len(candidate) > limit and current:
+            chunks.append(current)
+            current = line
+        else:
+            current = candidate
+    if current:
+        chunks.append(current)
+    return chunks
 
 
 def create_backup():
@@ -138,7 +155,6 @@ async def reminder_worker(bot):
             last_pruned_day = day_key
         hour, minute = map(int, store.setting('reminder_time', f'{config.REMINDER_HOUR:02}:{config.REMINDER_MINUTE:02}').split(':'))
         if store.setting('reminders_enabled', '0') == '1' and (t.hour, t.minute) >= (hour, minute):
-            reminder_days = {0, 3, 7, 10}
             # Group all friends whose birthday is due today or in 3, 7, or 10
             # days so an owner receives at most one friend reminder per day.
             friend_groups = {}
@@ -148,7 +164,7 @@ async def reminder_worker(bot):
                 except (TypeError, ValueError):
                     log.warning('Skipping invalid saved birthday for friend of user %s', friend['owner_id'])
                     continue
-                if days not in reminder_days:
+                if days not in REMINDER_DAYS:
                     continue
                 friend_groups.setdefault(friend['owner_id'], []).append((friend, days))
             for owner_id, birthdays in friend_groups.items():
@@ -162,17 +178,19 @@ async def reminder_worker(bot):
                         lines.append(f'{ui.emoji("birthday", "🎂")} امروز تولد {name} است! ({date})')
                     else:
                         lines.append(f'{ui.emoji("until", "⏳")} {days} روز تا تولد {name} مانده ({date})')
-                text = '\n'.join(lines)
                 try:
-                    await send_slot(bot)
-                    await bot.send_message(owner_id, text, parse_mode='HTML')
+                    for text in _message_chunks(lines):
+                        await send_slot(bot)
+                        await bot.send_message(owner_id, text, parse_mode='HTML')
                 except TelegramForbiddenError:
                     store.update_user(owner_id, blocked=1)
                     store.mark_friend_reminder(owner_id, day_key)
                 except TelegramRetryAfter as exc:
                     await asyncio.sleep(exc.retry_after + 1)
                     continue
-                except TelegramAPIError:
+                except TelegramAPIError as exc:
+                    log.warning('Could not send friends birthday reminders to user %s: %s',
+                                owner_id, exc)
                     continue
                 else:
                     store.mark_friend_reminder(owner_id, day_key)
@@ -182,7 +200,7 @@ async def reminder_worker(bot):
                 except (TypeError, ValueError):
                     log.warning('Skipping invalid saved birthday for user %s', u['id'])
                     continue
-                if days not in reminder_days:
+                if days not in REMINDER_DAYS:
                     continue
                 if days == 0:
                     text = f'{ui.emoji("birthday", "🎂")} تولدت مبارک! امروز روز توئه!'
@@ -197,7 +215,9 @@ async def reminder_worker(bot):
                 except TelegramRetryAfter as exc:
                     await asyncio.sleep(exc.retry_after + 1)
                     continue
-                except TelegramAPIError:
+                except TelegramAPIError as exc:
+                    log.warning('Could not send personal birthday reminder to user %s: %s',
+                                u['id'], exc)
                     continue
                 else:
                     with store.connection() as c:

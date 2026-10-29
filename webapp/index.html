@@ -355,6 +355,7 @@
         <h2 id="friends-title"><svg class="visual-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2m3-13a3 3 0 0 1 0 6m1 2a5 5 0 0 1 3 5"/></svg> تولد عزیزان</h2>
         <p>تولدهایی که برای دوست‌ها و خانواده‌ات ثبت کردی.</p>
       </header>
+      <label class="check-row" for="friend-reminders-enabled"><input id="friend-reminders-enabled" type="checkbox" checked> یادآوری تولد عزیزان در روز تولد و ۳، ۷ و ۱۰ روز قبل</label>
       <div class="friend-list" id="friends-list" aria-live="polite">
         <div class="empty-state">در حال بارگذاری تولدها…</div>
       </div>
@@ -404,6 +405,7 @@
       const birthdayActions = document.getElementById('birthday-actions');
       const form = document.getElementById('friend-form');
       const formStatus = document.getElementById('form-status');
+      const friendRemindersEnabled = document.getElementById('friend-reminders-enabled');
 
       function openPanel(name) {
         document.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== name; });
@@ -506,7 +508,7 @@
         homeCountdown.replaceChildren(...Array.from(countdownText.childNodes, node => node.cloneNode(true)));
       }
 
-      function renderFriends(friends) {
+      function renderFriends(friends, masterNotifications = true) {
         friendsList.replaceChildren();
         if (!friends.length) {
           const empty = document.createElement('div');
@@ -532,7 +534,8 @@
           else days.textContent = `${numberFa.format(friend.days_remaining)} روز مونده`;
           const reminder = document.createElement('div');
           reminder.className = 'friend-reminder';
-          setIconLabel(reminder, friend.notification ? 'bell' : 'bellOff', friend.notification ? 'یادآوری روشنه' : 'یادآوری خاموشه');
+          if (!masterNotifications) setIconLabel(reminder, 'bellOff', 'یادآوری کلی عزیزان خاموشه');
+          else setIconLabel(reminder, friend.notification ? 'bell' : 'bellOff', friend.notification ? 'یادآوری روشنه' : 'یادآوری خاموشه');
           info.append(name, date, days, reminder);
           const actions = document.createElement('div');
           actions.className = 'friend-actions';
@@ -580,7 +583,9 @@
           const data = await apiRequest('/api/dashboard');
           showProfile(data.profile);
           renderBirthday(data.birthday);
-          renderFriends(data.friends || []);
+          const masterNotifications = data.friend_reminders_enabled !== false;
+          renderFriends(data.friends || [], masterNotifications);
+          friendRemindersEnabled.checked = masterNotifications;
           setStatus('');
         } catch (error) {
           birthdayText.textContent = 'اطلاعات تولد در دسترس نیست.';
@@ -669,6 +674,23 @@
         form.hidden = true;
         formStatus.textContent = '';
         formStatus.classList.remove('error');
+      });
+      friendRemindersEnabled.addEventListener('change', async () => {
+        const enabled = friendRemindersEnabled.checked;
+        friendRemindersEnabled.disabled = true;
+        try {
+          await apiRequest('/api/friend-reminders', {
+            method: 'PATCH',
+            body: JSON.stringify({ enabled })
+          });
+          await loadDashboard();
+          setStatus(enabled ? 'یادآوری تولد عزیزانت روشن شد.' : 'یادآوری تولد عزیزانت خاموش شد.');
+        } catch (error) {
+          friendRemindersEnabled.checked = !enabled;
+          setStatus(error.message, true);
+        } finally {
+          friendRemindersEnabled.disabled = false;
+        }
       });
       form.addEventListener('submit', async event => {
         event.preventDefault();
